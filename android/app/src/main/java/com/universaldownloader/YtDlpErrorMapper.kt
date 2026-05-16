@@ -9,12 +9,9 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.Locale
 import javax.net.ssl.SSLException
-import kotlinx.coroutines.CancellationException
 
 internal object YtDlpErrorMapper {
     fun userFacingMessage(error: Throwable): String {
-        if (error is CancellationException) return "Download canceled."
-
         val all = generateSequence(error) { it.cause }.toList()
         val youtubeDl = all.filterIsInstance<YoutubeDLException>().firstOrNull()
         val io = all.filterIsInstance<IOException>().firstOrNull()
@@ -27,7 +24,7 @@ internal object YtDlpErrorMapper {
         io?.let(::mapIoException)?.let { return it }
 
         val rawMessage = all.asSequence().mapNotNull { it.message?.trim() }.firstOrNull { it.isNotBlank() }
-        return rawMessage?.takeIf { it.length <= 160 } ?: "Download failed."
+        return rawMessage?.let(::truncateForUi) ?: "Download failed."
     }
 
     private fun extractRelevantYtDlpLine(message: String): String {
@@ -81,19 +78,19 @@ internal object YtDlpErrorMapper {
                 "The site denied access to this media."
 
             lowered.contains("http error 404") ||
-                lowered.contains("not found") && lowered.contains("http") ->
+                (lowered.contains("not found") && lowered.contains("http")) ->
                 "Media not found (404)."
 
             lowered.contains("unable to extract") ||
-                lowered.contains("extractor") && lowered.contains("failed") ->
+                (lowered.contains("extractor") && lowered.contains("failed")) ->
                 "Failed to extract media info. The site may have changed — try updating yt-dlp."
 
-            lowered.contains("ffmpeg") && (lowered.contains("not found") || lowered.contains("error")) ||
-                lowered.contains("postprocessing") && lowered.contains("error") ||
+            (lowered.contains("ffmpeg") && (lowered.contains("not found") || lowered.contains("error"))) ||
+                (lowered.contains("postprocessing") && lowered.contains("error")) ||
                 lowered.contains("conversion failed") ->
                 "Post-processing failed (FFmpeg)."
 
-            else -> cleaned.takeIf { it.isNotBlank() && it.length <= 160 }
+            else -> cleaned.takeIf { it.isNotBlank() }?.let(::truncateForUi)
         }
     }
 
@@ -118,5 +115,11 @@ internal object YtDlpErrorMapper {
 
     private fun String.removePrefixCaseInsensitive(prefix: String): String {
         return if (startsWith(prefix, ignoreCase = true)) drop(prefix.length) else this
+    }
+
+    private fun truncateForUi(value: String): String {
+        val trimmed = value.trim()
+        if (trimmed.length <= 160) return trimmed
+        return trimmed.take(157) + "..."
     }
 }

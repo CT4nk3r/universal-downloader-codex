@@ -62,7 +62,8 @@ class YtDlpDownloader(
 
                 trySend(DownloadState.Finished(fileName))
             } catch (exception: CancellationException) {
-                trySend(DownloadState.Failed("Download canceled."))
+                // Preserve structured concurrency: cancellation should propagate.
+                throw exception
             } catch (exception: Exception) {
                 trySend(DownloadState.Failed(YtDlpErrorMapper.userFacingMessage(exception)))
             } finally {
