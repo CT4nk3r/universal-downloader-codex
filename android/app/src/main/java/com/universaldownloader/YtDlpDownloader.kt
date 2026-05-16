@@ -6,6 +6,7 @@ import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -60,8 +61,10 @@ class YtDlpDownloader(
                     ?: "Downloads/UniversalDownloader"
 
                 trySend(DownloadState.Finished(fileName))
+            } catch (exception: CancellationException) {
+                trySend(DownloadState.Failed("Download canceled."))
             } catch (exception: Exception) {
-                trySend(DownloadState.Failed(exception.message ?: "Download failed."))
+                trySend(DownloadState.Failed(YtDlpErrorMapper.userFacingMessage(exception)))
             } finally {
                 close()
             }
