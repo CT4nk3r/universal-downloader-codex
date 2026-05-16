@@ -1,6 +1,7 @@
 package com.universaldownloader
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -34,6 +35,11 @@ class DownloadView(
     private val statusTitle = TextView(context)
     private val statusSubtitle = TextView(context)
     private val advancedPanel = LinearLayout(context)
+    private val advancedButton: MaterialButton = MaterialButton(
+        context,
+        null,
+        com.google.android.material.R.attr.materialButtonOutlinedStyle
+    )
     private var selectedQuality = VideoQuality.Auto
     private var selectedAudioMode = AudioMode.VideoWithAudio
 
@@ -83,14 +89,19 @@ class DownloadView(
             setOnClickListener { startDownload(urlInput.text.toString()) }
         }
 
-        val advancedButton = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-            text = "Options"
+        advancedButton.apply {
+            text = "Hide options"
             isAllCaps = false
             letterSpacing = 0f
             cornerRadius = 18.dp
             minHeight = 50.dp
+            strokeWidth = 2.dp
+            strokeColor = ColorStateList.valueOf(COLOR_OUTLINE_STRONG)
+            setTextColor(COLOR_PRIMARY)
+            backgroundTintList = ColorStateList.valueOf(0xFFFFFFFF.toInt())
             setOnClickListener {
-                advancedPanel.visibility = if (advancedPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                val open = advancedPanel.visibility != View.VISIBLE
+                setAdvancedOpen(open)
             }
         }
 
@@ -120,7 +131,7 @@ class DownloadView(
 
         advancedPanel.apply {
             orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
+            visibility = View.VISIBLE
             background = roundedBackground(0xFFFFFFFF.toInt(), 22.dpFloat)
             setPadding(20.dp)
         }
@@ -136,14 +147,15 @@ class DownloadView(
 
         buildAdvancedOptions()
         bindState()
+        setAdvancedOpen(true)
 
         if (initialUrl.isNotBlank()) {
             post { startDownload(initialUrl) }
-        } else {
-            // Show a friendly, non-placeholder hint when the app opens without a shared link.
-            setStatus(
-                title = "Ready to download",
-                subtitle = "Paste a link above, or share one into this app.",
+            } else {
+                // Show a friendly, non-placeholder hint when the app opens without a shared link.
+                setStatus(
+                    title = "Ready to download",
+                    subtitle = "Paste a link above, or share one into this app.",
                 visible = true
             )
         }
@@ -191,6 +203,11 @@ class DownloadView(
                     cornerRadius = 14.dp
                     isCheckable = true
                     setPadding(4.dp, 0, 4.dp, 0)
+
+                    strokeWidth = 2.dp
+                    strokeColor = ColorStateList.valueOf(COLOR_OUTLINE_STRONG)
+                    setTextColor(makeToggleTextColors())
+                    backgroundTintList = makeToggleBackgroundColors()
                 }
                 addView(button, LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
                 if (index == 0) check(button.id)
@@ -245,7 +262,7 @@ class DownloadView(
                 progress.progress = downloadState.progress
                 setStatus(
                     title = "Downloading",
-                    subtitle = downloadState.message.ifBlank { "Working…" },
+                    subtitle = sanitizeProgressLine(downloadState.message).ifBlank { "Working…" },
                     visible = true
                 )
             }
@@ -274,6 +291,47 @@ class DownloadView(
         statusCard.visibility = if (visible) View.VISIBLE else View.GONE
     }
 
+    private fun setAdvancedOpen(open: Boolean) {
+        advancedPanel.visibility = if (open) View.VISIBLE else View.GONE
+        advancedButton.text = if (open) "Hide options" else "Options"
+    }
+
+    private fun sanitizeProgressLine(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isBlank()) return ""
+
+        // yt-dlp often prefixes messages with tags like "[youtube]".
+        val noTags = trimmed.replace(Regex("^\\s*\\[[^\\]]+\\]\\s*"), "")
+
+        // Keep it readable in the UI: shorten very long lines.
+        val singleLine = noTags.replace(Regex("\\s+"), " ")
+        return if (singleLine.length <= 72) singleLine else singleLine.take(69) + "..."
+    }
+
+    private fun makeToggleTextColors(): ColorStateList {
+        val states = arrayOf(
+            intArrayOf(android.R.attr.state_checked),
+            intArrayOf()
+        )
+        val colors = intArrayOf(
+            COLOR_PRIMARY,
+            COLOR_TEXT_MEDIUM
+        )
+        return ColorStateList(states, colors)
+    }
+
+    private fun makeToggleBackgroundColors(): ColorStateList {
+        val states = arrayOf(
+            intArrayOf(android.R.attr.state_checked),
+            intArrayOf()
+        )
+        val colors = intArrayOf(
+            0xFFE6F2EF.toInt(), // subtle tinted fill
+            0xFFFFFFFF.toInt()
+        )
+        return ColorStateList(states, colors)
+    }
+
     private fun roundedBackground(color: Int, radius: Float): GradientDrawable {
         return GradientDrawable().apply {
             setColor(color)
@@ -296,4 +354,10 @@ class DownloadView(
 
     private val Int.dpFloat: Float
         get() = this * resources.displayMetrics.density
+
+    private companion object {
+        private const val COLOR_PRIMARY = 0xFF216C5E.toInt()
+        private const val COLOR_TEXT_MEDIUM = 0xFF2D3733.toInt()
+        private const val COLOR_OUTLINE_STRONG = 0xFF9CA8A2.toInt()
+    }
 }
