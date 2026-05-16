@@ -47,6 +47,7 @@ class DownloadView(
     private var selectedOutputFormat = OutputFormat.Original
     private var selectedQuality = VideoQuality.Auto
     private var selectedAudioMode = AudioMode.VideoWithAudio
+    private var selectedAudioQuality = AudioQuality.Auto
     private var urlDebounceJob: Job? = null
 
     private lateinit var formatGroup: MaterialButtonToggleGroup
@@ -279,7 +280,8 @@ class DownloadView(
         val options = DownloadOptions(
             outputFormat = selectedOutputFormat,
             quality = selectedQuality,
-            audioMode = selectedAudioMode
+            audioMode = selectedAudioMode,
+            audioQuality = selectedAudioQuality
         )
         owner.lifecycleScope.launch {
             downloader.download(normalized, options).collectLatest { state.value = it }
@@ -379,7 +381,7 @@ class DownloadView(
         if (host.isBlank()) {
             // Default: video-ish controls.
             setFormatChoices(videoFormats(), selectedOutputFormat)
-            setQualityVisible(true)
+            setQualityModeVideo()
             return
         }
 
@@ -397,11 +399,11 @@ class DownloadView(
             selectedAudioMode = AudioMode.AudioOnly
             setAudioModeSelection(AudioMode.AudioOnly)
             setFormatChoices(audioFormats(), OutputFormat.M4a)
-            setQualityVisible(false)
+            setQualityModeAudio()
         } else {
             setAudioModeSelection(AudioMode.VideoWithAudio)
             setFormatChoices(videoFormats(), OutputFormat.Mp4)
-            setQualityVisible(true)
+            setQualityModeVideo()
         }
     }
 
@@ -411,9 +413,30 @@ class DownloadView(
         audioGroup.check(id)
     }
 
-    private fun setQualityVisible(visible: Boolean) {
-        qualityLabelView.visibility = if (visible) View.VISIBLE else View.GONE
-        qualityGroup.visibility = if (visible) View.VISIBLE else View.GONE
+    private fun setQualityModeVideo() {
+        qualityLabelView.text = "Quality"
+        replaceQualityChoices(VideoQuality.entries.map { it.label }) { index ->
+            selectedQuality = VideoQuality.entries[index]
+        }
+        qualityLabelView.visibility = View.VISIBLE
+        qualityGroup.visibility = View.VISIBLE
+    }
+
+    private fun setQualityModeAudio() {
+        qualityLabelView.text = "Audio quality"
+        replaceQualityChoices(AudioQuality.entries.map { it.label }) { index ->
+            selectedAudioQuality = AudioQuality.entries[index]
+        }
+        qualityLabelView.visibility = View.VISIBLE
+        qualityGroup.visibility = View.VISIBLE
+    }
+
+    private fun replaceQualityChoices(labels: List<String>, onSelected: (Int) -> Unit) {
+        val parent = qualityGroup.parent as? LinearLayout ?: return
+        val qualityIndex = parent.indexOfChild(qualityGroup)
+        parent.removeView(qualityGroup)
+        qualityGroup = toggleGroup(labels, onSelected)
+        parent.addView(qualityGroup, qualityIndex, wide().withTop(8.dp))
     }
 
     private fun setFormatChoices(formats: List<OutputFormat>, desired: OutputFormat) {

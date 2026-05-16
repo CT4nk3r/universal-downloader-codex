@@ -44,6 +44,9 @@ class YtDlpDownloader(
                         AudioMode.AudioOnly -> {
                             addOption("-x")
                             addOption("--audio-format", "m4a")
+                            options.audioQuality.kbps?.let { kbps ->
+                                addOption("--audio-quality", "${kbps}K")
+                            }
                         }
                         AudioMode.VideoOnly -> Unit
                     }
@@ -56,18 +59,28 @@ class YtDlpDownloader(
                         OutputFormat.M4a -> {
                             addOption("-x")
                             addOption("--audio-format", "m4a")
+                            options.audioQuality.kbps?.let { kbps ->
+                                addOption("--audio-quality", "${kbps}K")
+                            }
                         }
                         OutputFormat.Mp3 -> {
                             addOption("-x")
                             addOption("--audio-format", "mp3")
+                            options.audioQuality.kbps?.let { kbps ->
+                                addOption("--audio-quality", "${kbps}K")
+                            }
                         }
                         OutputFormat.Ogg -> {
                             addOption("-x")
                             addOption("--audio-format", "ogg")
+                            options.audioQuality.kbps?.let { kbps ->
+                                addOption("--audio-quality", "${kbps}K")
+                            }
                         }
                         OutputFormat.Wav -> {
                             addOption("-x")
                             addOption("--audio-format", "wav")
+                            // WAV is uncompressed; ignore bitrate selection.
                         }
                     }
                 }
