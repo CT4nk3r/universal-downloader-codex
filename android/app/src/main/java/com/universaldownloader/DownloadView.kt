@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.view.setPadding
+import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
@@ -19,6 +20,8 @@ import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -44,6 +47,13 @@ class DownloadView(
     private var selectedOutputFormat = OutputFormat.Original
     private var selectedQuality = VideoQuality.Auto
     private var selectedAudioMode = AudioMode.VideoWithAudio
+    private var urlDebounceJob: Job? = null
+
+    private lateinit var formatGroup: MaterialButtonToggleGroup
+    private lateinit var formatLabelView: TextView
+    private lateinit var qualityLabelView: TextView
+    private lateinit var qualityGroup: MaterialButtonToggleGroup
+    private lateinit var audioGroup: MaterialButtonToggleGroup
 
     init {
         isFillViewport = true
@@ -151,6 +161,20 @@ class DownloadView(
         bindState()
         setAdvancedOpen(true)
 
+        val owner = context as? LifecycleOwner
+        urlInput.addTextChangedListener(
+            afterTextChanged = {
+                val text = it?.toString().orEmpty()
+                urlDebounceJob?.cancel()
+                urlDebounceJob = owner?.lifecycleScope?.launch {
+                    delay(350)
+                    applyAutoUiForUrl(text.trim())
+                }
+            }
+        )
+
+        applyAutoUiForUrl(initialUrl.trim())
+
         if (initialUrl.isNotBlank()) {
             post { startDownload(initialUrl) }
             } else {
@@ -171,25 +195,25 @@ class DownloadView(
             setTextColor(0xFF17201D.toInt())
         }
 
-        val formatLabel = label("Format")
-        val formatGroup = toggleGroup(OutputFormat.entries.map { it.label }) { index ->
-            selectedOutputFormat = OutputFormat.entries[index]
+        formatLabelView = label("Format")
+        formatGroup = toggleGroup(videoFormatLabels()) { index ->
+            selectedOutputFormat = videoFormats()[index]
         }
 
-        val qualityLabel = label("Quality")
-        val qualityGroup = toggleGroup(VideoQuality.entries.map { it.label }) { index ->
+        qualityLabelView = label("Quality")
+        qualityGroup = toggleGroup(VideoQuality.entries.map { it.label }) { index ->
             selectedQuality = VideoQuality.entries[index]
         }
 
         val audioLabel = label("Audio")
-        val audioGroup = toggleGroup(AudioMode.entries.map { it.label }) { index ->
+        audioGroup = toggleGroup(AudioMode.entries.map { it.label }) { index ->
             selectedAudioMode = AudioMode.entries[index]
         }
 
         advancedPanel.addView(optionsTitle, wide())
-        advancedPanel.addView(formatLabel, wide().withTop(18.dp))
+        advancedPanel.addView(formatLabelView, wide().withTop(18.dp))
         advancedPanel.addView(formatGroup, wide().withTop(8.dp))
-        advancedPanel.addView(qualityLabel, wide().withTop(18.dp))
+        advancedPanel.addView(qualityLabelView, wide().withTop(18.dp))
         advancedPanel.addView(qualityGroup, wide().withTop(8.dp))
         advancedPanel.addView(audioLabel, wide().withTop(18.dp))
         advancedPanel.addView(audioGroup, wide().withTop(8.dp))
@@ -252,12 +276,11 @@ class DownloadView(
     private fun startDownload(url: String) {
         val owner = context as? LifecycleOwner ?: return
         val normalized = url.trim()
-        val auto = autoDefaultsForUrl(normalized)
         val options = DownloadOptions(
             outputFormat = selectedOutputFormat,
             quality = selectedQuality,
             audioMode = selectedAudioMode
-        ).withAutoDefaults(auto)
+        )
         owner.lifecycleScope.launch {
             downloader.download(normalized, options).collectLatest { state.value = it }
         }
@@ -347,30 +370,18 @@ class DownloadView(
         return ColorStateList(states, colors)
     }
 
-    private data class AutoDefaults(
-        val defaultAudioMode: AudioMode,
-        val defaultFormat: OutputFormat
-    )
-
-    private fun DownloadOptions.withAutoDefaults(auto: AutoDefaults?): DownloadOptions {
-        if (auto == null) return this
-        val audioMode = if (this.audioMode == AudioMode.VideoWithAudio && auto.defaultAudioMode != AudioMode.VideoWithAudio) {
-            // Preserve explicit user selection; only adjust if user left default.
-            auto.defaultAudioMode
-        } else {
-            this.audioMode
-        }
-        val format = if (this.outputFormat == OutputFormat.Original) auto.defaultFormat else this.outputFormat
-        return copy(audioMode = audioMode, outputFormat = format)
-    }
-
-    private fun autoDefaultsForUrl(url: String): AutoDefaults? {
+    private fun applyAutoUiForUrl(url: String) {
         val host = try {
             URI(url).host?.lowercase().orEmpty().removePrefix("www.")
         } catch (_: Exception) {
             ""
         }
-        if (host.isBlank()) return null
+        if (host.isBlank()) {
+            // Default: video-ish controls.
+            setFormatChoices(videoFormats(), selectedOutputFormat)
+            setQualityVisible(true)
+            return
+        }
 
         // Small pragmatic set; can be expanded. This is a fallback for when we don't have extractor metadata.
         val audioFirstHosts = setOf(
@@ -379,12 +390,54 @@ class DownloadView(
             "music.apple.com",
             "open.spotify.com"
         )
-        return if (audioFirstHosts.any { host == it || host.endsWith(".$it") }) {
-            AutoDefaults(defaultAudioMode = AudioMode.AudioOnly, defaultFormat = OutputFormat.M4a)
+        val isAudioFirst = audioFirstHosts.any { host == it || host.endsWith(".$it") }
+
+        if (isAudioFirst) {
+            // Switch to audio-only mode with audio-only formats; quality isn't meaningful.
+            selectedAudioMode = AudioMode.AudioOnly
+            setAudioModeSelection(AudioMode.AudioOnly)
+            setFormatChoices(audioFormats(), OutputFormat.M4a)
+            setQualityVisible(false)
         } else {
-            AutoDefaults(defaultAudioMode = AudioMode.VideoWithAudio, defaultFormat = OutputFormat.Mp4)
+            setAudioModeSelection(AudioMode.VideoWithAudio)
+            setFormatChoices(videoFormats(), OutputFormat.Mp4)
+            setQualityVisible(true)
         }
     }
+
+    private fun setAudioModeSelection(mode: AudioMode) {
+        val index = AudioMode.entries.indexOf(mode).takeIf { it >= 0 } ?: return
+        val id = audioGroup.getChildAt(index).id
+        audioGroup.check(id)
+    }
+
+    private fun setQualityVisible(visible: Boolean) {
+        qualityLabelView.visibility = if (visible) View.VISIBLE else View.GONE
+        qualityGroup.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    private fun setFormatChoices(formats: List<OutputFormat>, desired: OutputFormat) {
+        advancedPanel.removeView(formatGroup)
+        formatGroup = toggleGroup(formats.map { it.label }) { index ->
+            selectedOutputFormat = formats[index]
+        }
+        // Re-insert after the "Format" label (which is always right before it).
+        val formatLabelIndex = advancedPanel.indexOfChild(formatLabelView)
+        advancedPanel.addView(formatGroup, formatLabelIndex + 1, wide().withTop(8.dp))
+
+        val selected = formats.indexOfFirst { it == desired }.takeIf { it >= 0 } ?: 0
+        val selectedId = (formatGroup.getChildAt(selected) as? View)?.id
+        if (selectedId != null) formatGroup.check(selectedId)
+        selectedOutputFormat = formats[selected]
+    }
+
+    private fun videoFormats(): List<OutputFormat> =
+        listOf(OutputFormat.Original, OutputFormat.Mp4, OutputFormat.Mov, OutputFormat.Mkv)
+
+    private fun videoFormatLabels(): List<String> = videoFormats().map { it.label }
+
+    private fun audioFormats(): List<OutputFormat> =
+        listOf(OutputFormat.Original, OutputFormat.M4a, OutputFormat.Mp3, OutputFormat.Ogg, OutputFormat.Wav)
 
     private fun roundedBackground(color: Int, radius: Float): GradientDrawable {
         return GradientDrawable().apply {
