@@ -30,7 +30,9 @@ class DownloadView(
     private val state = MutableStateFlow<DownloadState>(DownloadState.Idle)
     private val urlInput = TextInputEditText(context)
     private val progress = LinearProgressIndicator(context)
-    private val status = TextView(context)
+    private val statusCard = LinearLayout(context)
+    private val statusTitle = TextView(context)
+    private val statusSubtitle = TextView(context)
     private val advancedPanel = LinearLayout(context)
     private var selectedQuality = VideoQuality.Auto
     private var selectedAudioMode = AudioMode.VideoWithAudio
@@ -96,10 +98,24 @@ class DownloadView(
         progress.isIndeterminate = false
         progress.visibility = View.GONE
 
-        status.apply {
-            text = if (initialUrl.isBlank()) "Ready" else context.getString(R.string.shared_link_received)
+        statusTitle.apply {
             textSize = 14f
-            setTextColor(0xFF3F4A46.toInt())
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(0xFF17201D.toInt())
+        }
+
+        statusSubtitle.apply {
+            textSize = 13f
+            setTextColor(0xFF58635F.toInt())
+        }
+
+        statusCard.apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedBackground(0xFFFFFFFF.toInt(), 18.dpFloat)
+            setPadding(16.dp)
+            visibility = View.GONE
+            addView(statusTitle, wide())
+            addView(statusSubtitle, wide().withTop(4.dp))
         }
 
         advancedPanel.apply {
@@ -115,14 +131,21 @@ class DownloadView(
         content.addView(downloadButton, wide().withTop(16.dp))
         content.addView(advancedButton, wide().withTop(8.dp))
         content.addView(advancedPanel, wide().withTop(16.dp))
-        content.addView(progress, wide().withTop(20.dp))
-        content.addView(status, wide().withTop(12.dp))
+        content.addView(progress, wide().withTop(18.dp))
+        content.addView(statusCard, wide().withTop(12.dp))
 
         buildAdvancedOptions()
         bindState()
 
         if (initialUrl.isNotBlank()) {
             post { startDownload(initialUrl) }
+        } else {
+            // Show a friendly, non-placeholder hint when the app opens without a shared link.
+            setStatus(
+                title = "Ready to download",
+                subtitle = "Paste a link above, or share one into this app.",
+                visible = true
+            )
         }
     }
 
@@ -212,22 +235,43 @@ class DownloadView(
         when (downloadState) {
             DownloadState.Idle -> {
                 progress.visibility = View.GONE
-                status.text = "Ready"
+                // Keep whatever initial hint we showed; don't overwrite with a blank/placeholder state.
+                if (statusCard.visibility != View.VISIBLE) {
+                    setStatus(title = "", subtitle = "", visible = false)
+                }
             }
             is DownloadState.Running -> {
                 progress.visibility = View.VISIBLE
                 progress.progress = downloadState.progress
-                status.text = downloadState.message
+                setStatus(
+                    title = "Downloading",
+                    subtitle = downloadState.message.ifBlank { "Working…" },
+                    visible = true
+                )
             }
             is DownloadState.Finished -> {
                 progress.visibility = View.GONE
-                status.text = "Saved ${downloadState.fileName}"
+                setStatus(
+                    title = "Saved",
+                    subtitle = downloadState.fileName,
+                    visible = true
+                )
             }
             is DownloadState.Failed -> {
                 progress.visibility = View.GONE
-                status.text = downloadState.reason
+                setStatus(
+                    title = "Couldn’t download",
+                    subtitle = downloadState.reason,
+                    visible = true
+                )
             }
         }
+    }
+
+    private fun setStatus(title: String, subtitle: String, visible: Boolean) {
+        statusTitle.text = title
+        statusSubtitle.text = subtitle
+        statusCard.visibility = if (visible) View.VISIBLE else View.GONE
     }
 
     private fun roundedBackground(color: Int, radius: Float): GradientDrawable {
