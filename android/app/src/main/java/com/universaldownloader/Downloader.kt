@@ -14,10 +14,11 @@ data class DownloadOptions(
 )
 
 enum class OutputFormat(val label: String) {
-    Original("Orig"),
+    Original("Source"),
     Mp4("MP4"),
     Mov("MOV"),
     Mkv("MKV"),
+    Webm("WEBM"),
     M4a("M4A"),
     Mp3("MP3"),
     Ogg("OGG"),
@@ -25,7 +26,7 @@ enum class OutputFormat(val label: String) {
 }
 
 enum class VideoQuality(val label: String) {
-    Auto("Best"),
+    Auto("Original"),
     P1080("1080p"),
     P720("720p"),
     P480("480p"),
@@ -33,7 +34,7 @@ enum class VideoQuality(val label: String) {
 }
 
 enum class AudioQuality(val label: String, val kbps: Int?) {
-    Auto("Auto", null),
+    Auto("Original", null),
     K320("320k", 320),
     K192("192k", 192),
     K128("128k", 128),
@@ -48,7 +49,26 @@ enum class AudioMode(val label: String) {
 
 sealed interface DownloadState {
     data object Idle : DownloadState
-    data class Running(val progress: Int, val message: String) : DownloadState
+    data class Running(
+        val progress: Int,
+        val message: String,
+        val items: List<DownloadItem> = emptyList()
+    ) : DownloadState
     data class Finished(val fileName: String) : DownloadState
+    data class Stopped(val completedCount: Int) : DownloadState
     data class Failed(val reason: String) : DownloadState
+}
+
+data class DownloadItem(
+    val index: Int,
+    val total: Int?,
+    val title: String,
+    val fileName: String?,
+    val progress: Int,
+    val status: DownloadItemStatus
+)
+
+enum class DownloadItemStatus {
+    Running,
+    Finished
 }

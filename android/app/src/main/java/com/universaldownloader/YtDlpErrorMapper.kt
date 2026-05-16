@@ -46,7 +46,7 @@ internal object YtDlpErrorMapper {
             lowered.contains("no video formats found") ||
                 lowered.contains("requested format is not available") ||
                 lowered.contains("requested format not available") ->
-                "No downloadable media found for these options. Try \"Best\" quality."
+                "No downloadable media found for these options. Try \"Original\" quality."
 
             lowered.contains("this video is not available in your country") ||
                 lowered.contains("not available in your country") ||
