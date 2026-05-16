@@ -300,8 +300,8 @@ class DownloadView(
         val trimmed = raw.trim()
         if (trimmed.isBlank()) return ""
 
-        // yt-dlp often prefixes messages with tags like "[youtube]".
-        val noTags = trimmed.replace(Regex("^\\s*\\[[^\\]]+\\]\\s*"), "")
+        // yt-dlp often prefixes messages with one or more tags like "[youtube]" or "[jsc:quickjs]".
+        val noTags = trimmed.replace(Regex("^(?:\\s*\\[[^\\]]+\\]\\s*)+"), "")
 
         // Keep it readable in the UI: shorten very long lines.
         val singleLine = noTags.replace(Regex("\\s+"), " ")
