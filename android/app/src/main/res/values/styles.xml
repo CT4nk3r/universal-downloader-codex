@@ -1,0 +1,13 @@
+<resources>
+    <style name="Theme.UniversalDownloader" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/seed</item>
+        <item name="colorPrimaryVariant">#174D44</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="textAllCaps">false</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/surface</item>
+    </style>
+
+    <style name="Theme.UniversalDownloader.NoActionBar" parent="Theme.UniversalDownloader" />
+</resources>

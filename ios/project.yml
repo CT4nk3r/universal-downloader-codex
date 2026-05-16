@@ -1,0 +1,31 @@
+name: UniversalDownloader
+options:
+  bundleIdPrefix: com.universaldownloader
+settings:
+  base:
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+targets:
+  UniversalDownloader:
+    type: application
+    platform: iOS
+    sources:
+      - UniversalDownloader
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.universaldownloader.app
+        INFOPLIST_FILE: UniversalDownloader/Info.plist
+        CODE_SIGN_ENTITLEMENTS: UniversalDownloader/UniversalDownloader.entitlements
+    dependencies:
+      - target: ShareExtension
+  ShareExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - ShareExtension
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.universaldownloader.app.ShareExtension
+        INFOPLIST_FILE: ShareExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ShareExtension/ShareExtension.entitlements

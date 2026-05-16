@@ -1,0 +1,29 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/editor state
+.idea/
+.vscode/
+*.iml
+
+# Android local/generated files
+.gradle/
+.kotlin/
+build/
+local.properties
+android/local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.ap_
+*.aab
+
+# iOS local/generated files
+DerivedData/
+Pods/
+*.xcworkspace/
+*.xcuserstate
+xcuserdata/
+ios/UniversalDownloader.xcodeproj/
