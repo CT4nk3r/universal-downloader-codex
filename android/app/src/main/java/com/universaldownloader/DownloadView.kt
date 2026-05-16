@@ -25,7 +25,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import java.net.URI
 
 class DownloadView(
     context: Context,
@@ -337,15 +336,7 @@ class DownloadView(
     }
 
     private fun sanitizeProgressLine(raw: String): String {
-        val trimmed = raw.trim()
-        if (trimmed.isBlank()) return ""
-
-        // yt-dlp often prefixes messages with one or more tags like "[youtube]" or "[jsc:quickjs]".
-        val noTags = trimmed.replace(Regex("^(?:\\s*\\[[^\\]]+\\]\\s*)+"), "")
-
-        // Keep it readable in the UI: shorten very long lines.
-        val singleLine = noTags.replace(Regex("\\s+"), " ")
-        return if (singleLine.length <= 72) singleLine else singleLine.take(69) + "..."
+        return ProgressLineSanitizer.sanitize(raw)
     }
 
     private fun makeToggleTextColors(): ColorStateList {
@@ -373,26 +364,7 @@ class DownloadView(
     }
 
     private fun applyAutoUiForUrl(url: String) {
-        val host = try {
-            URI(url).host?.lowercase().orEmpty().removePrefix("www.")
-        } catch (_: Exception) {
-            ""
-        }
-        if (host.isBlank()) {
-            // Default: video-ish controls.
-            setFormatChoices(videoFormats(), selectedOutputFormat)
-            setQualityModeVideo()
-            return
-        }
-
-        // Small pragmatic set; can be expanded. This is a fallback for when we don't have extractor metadata.
-        val audioFirstHosts = setOf(
-            "soundcloud.com",
-            "bandcamp.com",
-            "music.apple.com",
-            "open.spotify.com"
-        )
-        val isAudioFirst = audioFirstHosts.any { host == it || host.endsWith(".$it") }
+        val isAudioFirst = LinkClassifier.isAudioFirst(url)
 
         if (isAudioFirst) {
             // Switch to audio-only mode with audio-only formats; quality isn't meaningful.
