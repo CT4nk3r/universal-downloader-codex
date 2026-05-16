@@ -6,6 +6,7 @@ import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -43,8 +44,44 @@ class YtDlpDownloader(
                         AudioMode.AudioOnly -> {
                             addOption("-x")
                             addOption("--audio-format", "m4a")
+                            options.audioQuality.kbps?.let { kbps ->
+                                addOption("--audio-quality", "${kbps}K")
+                            }
                         }
                         AudioMode.VideoOnly -> Unit
+                    }
+
+                    when (options.outputFormat) {
+                        OutputFormat.Original -> Unit
+                        OutputFormat.Mp4 -> addOption("--remux-video", "mp4")
+                        OutputFormat.Mov -> addOption("--remux-video", "mov")
+                        OutputFormat.Mkv -> addOption("--remux-video", "mkv")
+                        OutputFormat.M4a -> {
+                            addOption("-x")
+                            addOption("--audio-format", "m4a")
+                            options.audioQuality.kbps?.let { kbps ->
+                                addOption("--audio-quality", "${kbps}K")
+                            }
+                        }
+                        OutputFormat.Mp3 -> {
+                            addOption("-x")
+                            addOption("--audio-format", "mp3")
+                            options.audioQuality.kbps?.let { kbps ->
+                                addOption("--audio-quality", "${kbps}K")
+                            }
+                        }
+                        OutputFormat.Ogg -> {
+                            addOption("-x")
+                            addOption("--audio-format", "ogg")
+                            options.audioQuality.kbps?.let { kbps ->
+                                addOption("--audio-quality", "${kbps}K")
+                            }
+                        }
+                        OutputFormat.Wav -> {
+                            addOption("-x")
+                            addOption("--audio-format", "wav")
+                            // WAV is uncompressed; ignore bitrate selection.
+                        }
                     }
                 }
 
@@ -60,8 +97,11 @@ class YtDlpDownloader(
                     ?: "Downloads/UniversalDownloader"
 
                 trySend(DownloadState.Finished(fileName))
+            } catch (exception: CancellationException) {
+                // Preserve structured concurrency: cancellation should propagate.
+                throw exception
             } catch (exception: Exception) {
-                trySend(DownloadState.Failed(exception.message ?: "Download failed."))
+                trySend(DownloadState.Failed(YtDlpErrorMapper.userFacingMessage(exception)))
             } finally {
                 close()
             }

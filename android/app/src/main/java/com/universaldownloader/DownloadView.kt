@@ -1,6 +1,7 @@
 package com.universaldownloader
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -9,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.view.setPadding
+import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
@@ -18,6 +20,8 @@ import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -30,10 +34,26 @@ class DownloadView(
     private val state = MutableStateFlow<DownloadState>(DownloadState.Idle)
     private val urlInput = TextInputEditText(context)
     private val progress = LinearProgressIndicator(context)
-    private val status = TextView(context)
+    private val statusCard = LinearLayout(context)
+    private val statusTitle = TextView(context)
+    private val statusSubtitle = TextView(context)
     private val advancedPanel = LinearLayout(context)
+    private val advancedButton: MaterialButton = MaterialButton(
+        context,
+        null,
+        com.google.android.material.R.attr.materialButtonOutlinedStyle
+    )
+    private var selectedOutputFormat = OutputFormat.Original
     private var selectedQuality = VideoQuality.Auto
     private var selectedAudioMode = AudioMode.VideoWithAudio
+    private var selectedAudioQuality = AudioQuality.Auto
+    private var urlDebounceJob: Job? = null
+
+    private lateinit var formatGroup: MaterialButtonToggleGroup
+    private lateinit var formatLabelView: TextView
+    private lateinit var qualityLabelView: TextView
+    private lateinit var qualityGroup: MaterialButtonToggleGroup
+    private lateinit var audioGroup: MaterialButtonToggleGroup
 
     init {
         isFillViewport = true
@@ -81,14 +101,19 @@ class DownloadView(
             setOnClickListener { startDownload(urlInput.text.toString()) }
         }
 
-        val advancedButton = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-            text = "Options"
+        advancedButton.apply {
+            text = "Hide options"
             isAllCaps = false
             letterSpacing = 0f
             cornerRadius = 18.dp
             minHeight = 50.dp
+            strokeWidth = 2.dp
+            strokeColor = ColorStateList.valueOf(COLOR_OUTLINE_STRONG)
+            setTextColor(COLOR_PRIMARY)
+            backgroundTintList = ColorStateList.valueOf(0xFFFFFFFF.toInt())
             setOnClickListener {
-                advancedPanel.visibility = if (advancedPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                val open = advancedPanel.visibility != View.VISIBLE
+                setAdvancedOpen(open)
             }
         }
 
@@ -96,15 +121,29 @@ class DownloadView(
         progress.isIndeterminate = false
         progress.visibility = View.GONE
 
-        status.apply {
-            text = if (initialUrl.isBlank()) "Ready" else context.getString(R.string.shared_link_received)
+        statusTitle.apply {
             textSize = 14f
-            setTextColor(0xFF3F4A46.toInt())
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(0xFF17201D.toInt())
+        }
+
+        statusSubtitle.apply {
+            textSize = 13f
+            setTextColor(0xFF58635F.toInt())
+        }
+
+        statusCard.apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedBackground(0xFFFFFFFF.toInt(), 18.dpFloat)
+            setPadding(16.dp)
+            visibility = View.GONE
+            addView(statusTitle, wide())
+            addView(statusSubtitle, wide().withTop(4.dp))
         }
 
         advancedPanel.apply {
             orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
+            visibility = View.VISIBLE
             background = roundedBackground(0xFFFFFFFF.toInt(), 22.dpFloat)
             setPadding(20.dp)
         }
@@ -115,14 +154,36 @@ class DownloadView(
         content.addView(downloadButton, wide().withTop(16.dp))
         content.addView(advancedButton, wide().withTop(8.dp))
         content.addView(advancedPanel, wide().withTop(16.dp))
-        content.addView(progress, wide().withTop(20.dp))
-        content.addView(status, wide().withTop(12.dp))
+        content.addView(progress, wide().withTop(18.dp))
+        content.addView(statusCard, wide().withTop(12.dp))
 
         buildAdvancedOptions()
         bindState()
+        setAdvancedOpen(true)
+
+        val owner = context as? LifecycleOwner
+        urlInput.addTextChangedListener(
+            afterTextChanged = {
+                val text = it?.toString().orEmpty()
+                urlDebounceJob?.cancel()
+                urlDebounceJob = owner?.lifecycleScope?.launch {
+                    delay(350)
+                    applyAutoUiForUrl(text.trim())
+                }
+            }
+        )
+
+        applyAutoUiForUrl(initialUrl.trim())
 
         if (initialUrl.isNotBlank()) {
             post { startDownload(initialUrl) }
+            } else {
+                // Show a friendly, non-placeholder hint when the app opens without a shared link.
+                setStatus(
+                    title = "Ready to download",
+                    subtitle = "Paste a link above, or share one into this app.",
+                visible = true
+            )
         }
     }
 
@@ -134,18 +195,25 @@ class DownloadView(
             setTextColor(0xFF17201D.toInt())
         }
 
-        val qualityLabel = label("Quality")
-        val qualityGroup = toggleGroup(VideoQuality.entries.map { it.label }) { index ->
+        formatLabelView = label("Format")
+        formatGroup = toggleGroup(videoFormatLabels()) { index ->
+            selectedOutputFormat = videoFormats()[index]
+        }
+
+        qualityLabelView = label("Quality")
+        qualityGroup = toggleGroup(VideoQuality.entries.map { it.label }) { index ->
             selectedQuality = VideoQuality.entries[index]
         }
 
         val audioLabel = label("Audio")
-        val audioGroup = toggleGroup(AudioMode.entries.map { it.label }) { index ->
+        audioGroup = toggleGroup(AudioMode.entries.map { it.label }) { index ->
             selectedAudioMode = AudioMode.entries[index]
         }
 
         advancedPanel.addView(optionsTitle, wide())
-        advancedPanel.addView(qualityLabel, wide().withTop(18.dp))
+        advancedPanel.addView(formatLabelView, wide().withTop(18.dp))
+        advancedPanel.addView(formatGroup, wide().withTop(8.dp))
+        advancedPanel.addView(qualityLabelView, wide().withTop(18.dp))
         advancedPanel.addView(qualityGroup, wide().withTop(8.dp))
         advancedPanel.addView(audioLabel, wide().withTop(18.dp))
         advancedPanel.addView(audioGroup, wide().withTop(8.dp))
@@ -168,6 +236,11 @@ class DownloadView(
                     cornerRadius = 14.dp
                     isCheckable = true
                     setPadding(4.dp, 0, 4.dp, 0)
+
+                    strokeWidth = 2.dp
+                    strokeColor = ColorStateList.valueOf(COLOR_OUTLINE_STRONG)
+                    setTextColor(makeToggleTextColors())
+                    backgroundTintList = makeToggleBackgroundColors()
                 }
                 addView(button, LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
                 if (index == 0) check(button.id)
@@ -202,9 +275,15 @@ class DownloadView(
 
     private fun startDownload(url: String) {
         val owner = context as? LifecycleOwner ?: return
-        val options = DownloadOptions(selectedQuality, selectedAudioMode)
+        val normalized = url.trim()
+        val options = DownloadOptions(
+            outputFormat = selectedOutputFormat,
+            quality = selectedQuality,
+            audioMode = selectedAudioMode,
+            audioQuality = selectedAudioQuality
+        )
         owner.lifecycleScope.launch {
-            downloader.download(url, options).collectLatest { state.value = it }
+            downloader.download(normalized, options).collectLatest { state.value = it }
         }
     }
 
@@ -212,23 +291,148 @@ class DownloadView(
         when (downloadState) {
             DownloadState.Idle -> {
                 progress.visibility = View.GONE
-                status.text = "Ready"
+                // Keep whatever initial hint we showed; don't overwrite with a blank/placeholder state.
+                if (statusCard.visibility != View.VISIBLE) {
+                    setStatus(title = "", subtitle = "", visible = false)
+                }
             }
             is DownloadState.Running -> {
                 progress.visibility = View.VISIBLE
                 progress.progress = downloadState.progress
-                status.text = downloadState.message
+                setStatus(
+                    title = "Downloading",
+                    subtitle = sanitizeProgressLine(downloadState.message).ifBlank { "Working…" },
+                    visible = true
+                )
             }
             is DownloadState.Finished -> {
                 progress.visibility = View.GONE
-                status.text = "Saved ${downloadState.fileName}"
+                setStatus(
+                    title = "Saved",
+                    subtitle = downloadState.fileName,
+                    visible = true
+                )
             }
             is DownloadState.Failed -> {
                 progress.visibility = View.GONE
-                status.text = downloadState.reason
+                setStatus(
+                    title = "Couldn’t download",
+                    subtitle = downloadState.reason,
+                    visible = true
+                )
             }
         }
     }
+
+    private fun setStatus(title: String, subtitle: String, visible: Boolean) {
+        statusTitle.text = title
+        statusSubtitle.text = subtitle
+        statusCard.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    private fun setAdvancedOpen(open: Boolean) {
+        advancedPanel.visibility = if (open) View.VISIBLE else View.GONE
+        advancedButton.text = if (open) "Hide options" else "Options"
+    }
+
+    private fun sanitizeProgressLine(raw: String): String {
+        return ProgressLineSanitizer.sanitize(raw)
+    }
+
+    private fun makeToggleTextColors(): ColorStateList {
+        val states = arrayOf(
+            intArrayOf(android.R.attr.state_checked),
+            intArrayOf()
+        )
+        val colors = intArrayOf(
+            COLOR_PRIMARY,
+            COLOR_TEXT_MEDIUM
+        )
+        return ColorStateList(states, colors)
+    }
+
+    private fun makeToggleBackgroundColors(): ColorStateList {
+        val states = arrayOf(
+            intArrayOf(android.R.attr.state_checked),
+            intArrayOf()
+        )
+        val colors = intArrayOf(
+            0xFFE6F2EF.toInt(), // subtle tinted fill
+            0xFFFFFFFF.toInt()
+        )
+        return ColorStateList(states, colors)
+    }
+
+    private fun applyAutoUiForUrl(url: String) {
+        val isAudioFirst = LinkClassifier.isAudioFirst(url)
+
+        if (isAudioFirst) {
+            // Switch to audio-only mode with audio-only formats; quality isn't meaningful.
+            selectedAudioMode = AudioMode.AudioOnly
+            setAudioModeSelection(AudioMode.AudioOnly)
+            setFormatChoices(audioFormats(), OutputFormat.M4a)
+            setQualityModeAudio()
+        } else {
+            setAudioModeSelection(AudioMode.VideoWithAudio)
+            setFormatChoices(videoFormats(), OutputFormat.Mp4)
+            setQualityModeVideo()
+        }
+    }
+
+    private fun setAudioModeSelection(mode: AudioMode) {
+        val index = AudioMode.entries.indexOf(mode).takeIf { it >= 0 } ?: return
+        val id = audioGroup.getChildAt(index).id
+        audioGroup.check(id)
+    }
+
+    private fun setQualityModeVideo() {
+        qualityLabelView.text = "Quality"
+        replaceQualityChoices(VideoQuality.entries.map { it.label }) { index ->
+            selectedQuality = VideoQuality.entries[index]
+        }
+        qualityLabelView.visibility = View.VISIBLE
+        qualityGroup.visibility = View.VISIBLE
+    }
+
+    private fun setQualityModeAudio() {
+        qualityLabelView.text = "Audio quality"
+        replaceQualityChoices(AudioQuality.entries.map { it.label }) { index ->
+            selectedAudioQuality = AudioQuality.entries[index]
+        }
+        qualityLabelView.visibility = View.VISIBLE
+        qualityGroup.visibility = View.VISIBLE
+    }
+
+    private fun replaceQualityChoices(labels: List<String>, onSelected: (Int) -> Unit) {
+        val parent = qualityGroup.parent as? LinearLayout ?: return
+        val qualityIndex = parent.indexOfChild(qualityGroup)
+        parent.removeView(qualityGroup)
+        qualityGroup = toggleGroup(labels, onSelected)
+        parent.addView(qualityGroup, qualityIndex, wide().withTop(8.dp))
+    }
+
+    private fun setFormatChoices(formats: List<OutputFormat>, desired: OutputFormat) {
+        advancedPanel.removeView(formatGroup)
+        formatGroup = toggleGroup(formats.map { it.label }) { index ->
+            selectedOutputFormat = formats[index]
+        }
+        // Re-insert after the "Format" label (which is always right before it).
+        val formatLabelIndex = advancedPanel.indexOfChild(formatLabelView)
+        advancedPanel.addView(formatGroup, formatLabelIndex + 1, wide().withTop(8.dp))
+
+        val selected = formats.indexOfFirst { it == desired }.takeIf { it >= 0 } ?: 0
+        val selectedId = (formatGroup.getChildAt(selected) as? View)?.id
+        if (selectedId != null) formatGroup.check(selectedId)
+        selectedOutputFormat = formats[selected]
+    }
+
+    private fun videoFormats(): List<OutputFormat> =
+        listOf(OutputFormat.Original, OutputFormat.Mp4, OutputFormat.Mov, OutputFormat.Mkv)
+
+    private fun videoFormatLabels(): List<String> = videoFormats().map { it.label }
+
+    private fun audioFormats(): List<OutputFormat> =
+        listOf(OutputFormat.Original, OutputFormat.M4a, OutputFormat.Mp3, OutputFormat.Ogg, OutputFormat.Wav)
 
     private fun roundedBackground(color: Int, radius: Float): GradientDrawable {
         return GradientDrawable().apply {
@@ -252,4 +456,10 @@ class DownloadView(
 
     private val Int.dpFloat: Float
         get() = this * resources.displayMetrics.density
+
+    private companion object {
+        private const val COLOR_PRIMARY = 0xFF216C5E.toInt()
+        private const val COLOR_TEXT_MEDIUM = 0xFF2D3733.toInt()
+        private const val COLOR_OUTLINE_STRONG = 0xFF9CA8A2.toInt()
+    }
 }
