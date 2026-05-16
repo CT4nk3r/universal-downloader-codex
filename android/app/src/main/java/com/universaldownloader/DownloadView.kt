@@ -22,6 +22,7 @@ import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.net.URI
 
 class DownloadView(
     context: Context,
@@ -40,6 +41,7 @@ class DownloadView(
         null,
         com.google.android.material.R.attr.materialButtonOutlinedStyle
     )
+    private var selectedOutputFormat = OutputFormat.Original
     private var selectedQuality = VideoQuality.Auto
     private var selectedAudioMode = AudioMode.VideoWithAudio
 
@@ -169,6 +171,11 @@ class DownloadView(
             setTextColor(0xFF17201D.toInt())
         }
 
+        val formatLabel = label("Format")
+        val formatGroup = toggleGroup(OutputFormat.entries.map { it.label }) { index ->
+            selectedOutputFormat = OutputFormat.entries[index]
+        }
+
         val qualityLabel = label("Quality")
         val qualityGroup = toggleGroup(VideoQuality.entries.map { it.label }) { index ->
             selectedQuality = VideoQuality.entries[index]
@@ -180,6 +187,8 @@ class DownloadView(
         }
 
         advancedPanel.addView(optionsTitle, wide())
+        advancedPanel.addView(formatLabel, wide().withTop(18.dp))
+        advancedPanel.addView(formatGroup, wide().withTop(8.dp))
         advancedPanel.addView(qualityLabel, wide().withTop(18.dp))
         advancedPanel.addView(qualityGroup, wide().withTop(8.dp))
         advancedPanel.addView(audioLabel, wide().withTop(18.dp))
@@ -242,9 +251,15 @@ class DownloadView(
 
     private fun startDownload(url: String) {
         val owner = context as? LifecycleOwner ?: return
-        val options = DownloadOptions(selectedQuality, selectedAudioMode)
+        val normalized = url.trim()
+        val auto = autoDefaultsForUrl(normalized)
+        val options = DownloadOptions(
+            outputFormat = selectedOutputFormat,
+            quality = selectedQuality,
+            audioMode = selectedAudioMode
+        ).withAutoDefaults(auto)
         owner.lifecycleScope.launch {
-            downloader.download(url, options).collectLatest { state.value = it }
+            downloader.download(normalized, options).collectLatest { state.value = it }
         }
     }
 
@@ -330,6 +345,45 @@ class DownloadView(
             0xFFFFFFFF.toInt()
         )
         return ColorStateList(states, colors)
+    }
+
+    private data class AutoDefaults(
+        val defaultAudioMode: AudioMode,
+        val defaultFormat: OutputFormat
+    )
+
+    private fun DownloadOptions.withAutoDefaults(auto: AutoDefaults?): DownloadOptions {
+        if (auto == null) return this
+        val audioMode = if (this.audioMode == AudioMode.VideoWithAudio && auto.defaultAudioMode != AudioMode.VideoWithAudio) {
+            // Preserve explicit user selection; only adjust if user left default.
+            auto.defaultAudioMode
+        } else {
+            this.audioMode
+        }
+        val format = if (this.outputFormat == OutputFormat.Original) auto.defaultFormat else this.outputFormat
+        return copy(audioMode = audioMode, outputFormat = format)
+    }
+
+    private fun autoDefaultsForUrl(url: String): AutoDefaults? {
+        val host = try {
+            URI(url).host?.lowercase().orEmpty().removePrefix("www.")
+        } catch (_: Exception) {
+            ""
+        }
+        if (host.isBlank()) return null
+
+        // Small pragmatic set; can be expanded. This is a fallback for when we don't have extractor metadata.
+        val audioFirstHosts = setOf(
+            "soundcloud.com",
+            "bandcamp.com",
+            "music.apple.com",
+            "open.spotify.com"
+        )
+        return if (audioFirstHosts.any { host == it || host.endsWith(".$it") }) {
+            AutoDefaults(defaultAudioMode = AudioMode.AudioOnly, defaultFormat = OutputFormat.M4a)
+        } else {
+            AutoDefaults(defaultAudioMode = AudioMode.VideoWithAudio, defaultFormat = OutputFormat.Mp4)
+        }
     }
 
     private fun roundedBackground(color: Int, radius: Float): GradientDrawable {

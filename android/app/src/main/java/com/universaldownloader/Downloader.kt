@@ -7,9 +7,21 @@ interface Downloader {
 }
 
 data class DownloadOptions(
+    val outputFormat: OutputFormat = OutputFormat.Original,
     val quality: VideoQuality = VideoQuality.Auto,
     val audioMode: AudioMode = AudioMode.VideoWithAudio
 )
+
+enum class OutputFormat(val label: String) {
+    Original("Orig"),
+    Mp4("MP4"),
+    Mov("MOV"),
+    Mkv("MKV"),
+    M4a("M4A"),
+    Mp3("MP3"),
+    Ogg("OGG"),
+    Wav("WAV")
+}
 
 enum class VideoQuality(val label: String) {
     Auto("Best"),

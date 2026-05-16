@@ -47,6 +47,29 @@ class YtDlpDownloader(
                         }
                         AudioMode.VideoOnly -> Unit
                     }
+
+                    when (options.outputFormat) {
+                        OutputFormat.Original -> Unit
+                        OutputFormat.Mp4 -> addOption("--remux-video", "mp4")
+                        OutputFormat.Mov -> addOption("--remux-video", "mov")
+                        OutputFormat.Mkv -> addOption("--remux-video", "mkv")
+                        OutputFormat.M4a -> {
+                            addOption("-x")
+                            addOption("--audio-format", "m4a")
+                        }
+                        OutputFormat.Mp3 -> {
+                            addOption("-x")
+                            addOption("--audio-format", "mp3")
+                        }
+                        OutputFormat.Ogg -> {
+                            addOption("-x")
+                            addOption("--audio-format", "ogg")
+                        }
+                        OutputFormat.Wav -> {
+                            addOption("-x")
+                            addOption("--audio-format", "wav")
+                        }
+                    }
                 }
 
                 YoutubeDL.getInstance().execute(request) { progress, _, line ->
