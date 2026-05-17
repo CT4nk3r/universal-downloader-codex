@@ -49,6 +49,7 @@ struct DownloadScreen: View {
                     ProgressView(value: viewModel.progress, total: 100)
                         .tint(.appGreen)
                         .padding(.vertical, 2)
+                        .accessibilityIdentifier("download.progress")
                 }
                 statusPanel
                 playlistPanel
@@ -83,6 +84,7 @@ struct DownloadScreen: View {
                 .foregroundStyle(Color.primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
+                .accessibilityIdentifier("download.title")
             Spacer(minLength: 8)
             Button {
                 viewModel.showingAbout = true
@@ -109,6 +111,8 @@ struct DownloadScreen: View {
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
             .keyboardType(.URL)
+            .submitLabel(.done)
+            .accessibilityIdentifier("download.urlField")
             .font(.system(size: 16))
             .padding(.horizontal, 12)
             .frame(minHeight: 44)
@@ -132,6 +136,7 @@ struct DownloadScreen: View {
                 .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(FilledButtonStyle())
+        .accessibilityIdentifier("download.primaryButton")
     }
 
     private var primaryActions: some View {
@@ -153,6 +158,7 @@ struct DownloadScreen: View {
                 .frame(width: 112, height: 44)
         }
         .buttonStyle(OutlineButtonStyle())
+        .accessibilityIdentifier("download.optionsToggle")
     }
 
     private var optionsPanel: some View {
@@ -232,10 +238,12 @@ struct DownloadScreen: View {
                 Text(viewModel.statusTitle)
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(Color.primaryText)
+                    .accessibilityIdentifier("download.statusTitle")
                 Text(viewModel.statusSubtitle)
                     .font(.system(size: 14))
                     .foregroundStyle(Color.secondaryText)
                     .lineLimit(3)
+                    .accessibilityIdentifier("download.statusSubtitle")
                 if viewModel.stopVisible {
                     Button {
                         viewModel.stopDownload()
@@ -246,6 +254,7 @@ struct DownloadScreen: View {
                     }
                     .buttonStyle(StopButtonStyle())
                     .padding(.top, 8)
+                    .accessibilityIdentifier("download.stopButton")
                 }
             }
             .cardStyle(cornerRadius: 14, padding: 12)
@@ -418,7 +427,7 @@ final class DownloadViewModel: ObservableObject {
             stopVisible = true
             self.progress = Double(progress)
             self.items = items
-            setStatus(title: "Downloading", subtitle: sanitizeProgressLine(message), visible: true)
+            setStatus(title: "Downloading", subtitle: ProgressLineSanitizer.sanitize(message), visible: true)
         case .finished(let fileName):
             progressVisible = false
             stopVisible = false
@@ -460,17 +469,6 @@ final class DownloadViewModel: ObservableObject {
         }
     }
 
-    private func sanitizeProgressLine(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "Working..." }
-        let noTags = trimmed.replacingOccurrences(
-            of: #"^(?:\s*\[[^\]]+\]\s*)+"#,
-            with: "",
-            options: .regularExpression
-        )
-        let singleLine = noTags.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-        return singleLine.count <= 72 ? singleLine : String(singleLine.prefix(69)) + "..."
-    }
 }
 
 struct OptionChip: View {
@@ -488,6 +486,7 @@ struct OptionChip: View {
                 .frame(height: 34)
         }
         .buttonStyle(ChipButtonStyle(isSelected: isSelected))
+        .accessibilityIdentifier("optionChip.\(title)")
     }
 }
 
@@ -566,26 +565,6 @@ enum PresentedShare: Identifiable {
         case .activity(let url): "activity-\(url.path)"
         case .mail(let url): "mail-\(url.path)"
         }
-    }
-}
-
-private enum LinkClassifier {
-    private static let audioFirstHosts = [
-        "soundcloud.com",
-        "bandcamp.com",
-        "music.apple.com",
-        "open.spotify.com"
-    ]
-
-    static func isAudioFirst(_ rawURL: String) -> Bool {
-        guard
-            let host = URL(string: rawURL.trimmingCharacters(in: .whitespacesAndNewlines))?
-                .host?
-                .lowercased()
-                .replacingOccurrences(of: "www.", with: "")
-        else { return false }
-
-        return audioFirstHosts.contains { host == $0 || host.hasSuffix(".\($0)") }
     }
 }
 

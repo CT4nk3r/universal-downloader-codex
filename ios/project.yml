@@ -11,6 +11,13 @@ targets:
     sources:
       - UniversalDownloader
       - Shared
+    scheme:
+      testTargets:
+        - UniversalDownloaderTests
+        - UniversalDownloaderUITests
+      gatherCoverageData: true
+      coverageTargets:
+        - UniversalDownloader
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ct4nk3r.universaldownloader
@@ -19,6 +26,26 @@ targets:
         CODE_SIGN_ENTITLEMENTS: UniversalDownloader/UniversalDownloader.entitlements
     dependencies:
       - target: ShareExtension
+  UniversalDownloaderTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - UniversalDownloaderTests
+    dependencies:
+      - target: UniversalDownloader
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+  UniversalDownloaderUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - UniversalDownloaderUITests
+    dependencies:
+      - target: UniversalDownloader
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
   ShareExtension:
     type: app-extension
     platform: iOS
