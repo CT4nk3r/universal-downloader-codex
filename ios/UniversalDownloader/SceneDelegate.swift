@@ -19,7 +19,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         if let url = connectionOptions.urlContexts.first?.url {
             process(url: url)
-        } else {
+        } else if !isUITesting {
             controller.processSharedLinks()
         }
     }
@@ -30,11 +30,16 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
+        guard !isUITesting else { return }
         controller?.processSharedLinks()
     }
 
     private var controller: DownloadViewController? {
         window?.rootViewController as? DownloadViewController
+    }
+
+    private var isUITesting: Bool {
+        ProcessInfo.processInfo.arguments.contains("--ui-testing")
     }
 
     private func process(url: URL) {
