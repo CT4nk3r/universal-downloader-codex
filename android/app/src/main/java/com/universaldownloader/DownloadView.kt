@@ -29,7 +29,8 @@ import kotlinx.coroutines.launch
 class DownloadView(
     context: Context,
     private val downloader: Downloader,
-    initialUrl: String
+    initialUrl: String,
+    private val onShowAbout: () -> Unit
 ) : ScrollView(context) {
     private val state = MutableStateFlow<DownloadState>(DownloadState.Idle)
     private val urlInput = TextInputEditText(context)
@@ -37,6 +38,7 @@ class DownloadView(
     private val statusCard = LinearLayout(context)
     private val statusTitle = TextView(context)
     private val statusSubtitle = TextView(context)
+    private val itemList = LinearLayout(context)
     private val advancedPanel = LinearLayout(context)
     private val advancedButton: MaterialButton = MaterialButton(
         context,
@@ -44,16 +46,20 @@ class DownloadView(
         com.google.android.material.R.attr.materialButtonOutlinedStyle
     )
     private var selectedOutputFormat = OutputFormat.Original
+    private var selectedVideoFormat = OutputFormat.Original
+    private var selectedAudioFormat = OutputFormat.Original
     private var selectedQuality = VideoQuality.Auto
     private var selectedAudioMode = AudioMode.VideoWithAudio
     private var selectedAudioQuality = AudioQuality.Auto
     private var urlDebounceJob: Job? = null
+    private var downloadJob: Job? = null
 
     private lateinit var formatGroup: MaterialButtonToggleGroup
     private lateinit var formatLabelView: TextView
     private lateinit var qualityLabelView: TextView
     private lateinit var qualityGroup: MaterialButtonToggleGroup
     private lateinit var audioGroup: MaterialButtonToggleGroup
+    private lateinit var stopButton: MaterialButton
 
     init {
         isFillViewport = true
@@ -66,11 +72,33 @@ class DownloadView(
         }
         addView(content, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
+        val headerRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
         val header = TextView(context).apply {
             text = "Universal Downloader"
             textSize = 28f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(0xFF17201D.toInt())
+        }
+
+        val aboutButton = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            text = "i"
+            textSize = 16f
+            isAllCaps = false
+            letterSpacing = 0f
+            minWidth = 0
+            minimumWidth = 0
+            minHeight = 44.dp
+            cornerRadius = 22.dp
+            strokeWidth = 2.dp
+            strokeColor = ColorStateList.valueOf(COLOR_OUTLINE_STRONG)
+            setTextColor(COLOR_PRIMARY)
+            backgroundTintList = ColorStateList.valueOf(0xFFFFFFFF.toInt())
+            setPadding(0, 0, 0, 0)
+            setOnClickListener { onShowAbout() }
         }
 
         val subtitle = TextView(context).apply {
@@ -99,6 +127,21 @@ class DownloadView(
             cornerRadius = 18.dp
             minHeight = 56.dp
             setOnClickListener { startDownload(urlInput.text.toString()) }
+        }
+
+        stopButton = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            text = "Stop"
+            textSize = 16f
+            isAllCaps = false
+            letterSpacing = 0f
+            cornerRadius = 18.dp
+            minHeight = 56.dp
+            strokeWidth = 2.dp
+            strokeColor = ColorStateList.valueOf(COLOR_OUTLINE_STRONG)
+            setTextColor(0xFF9B2C2C.toInt())
+            backgroundTintList = ColorStateList.valueOf(0xFFFFFFFF.toInt())
+            visibility = View.GONE
+            setOnClickListener { stopDownload() }
         }
 
         advancedButton.apply {
@@ -139,6 +182,14 @@ class DownloadView(
             visibility = View.GONE
             addView(statusTitle, wide())
             addView(statusSubtitle, wide().withTop(4.dp))
+            addView(stopButton, wide().withTop(12.dp))
+        }
+
+        itemList.apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            background = roundedBackground(0xFFFFFFFF.toInt(), 18.dpFloat)
+            setPadding(16.dp)
         }
 
         advancedPanel.apply {
@@ -148,7 +199,10 @@ class DownloadView(
             setPadding(20.dp)
         }
 
-        content.addView(header, wide())
+        headerRow.addView(header, LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+        headerRow.addView(aboutButton, LinearLayout.LayoutParams(44.dp, 44.dp))
+
+        content.addView(headerRow, wide())
         content.addView(subtitle, wide().withTop(6.dp))
         content.addView(inputLayout, wide().withTop(30.dp))
         content.addView(downloadButton, wide().withTop(16.dp))
@@ -156,6 +210,7 @@ class DownloadView(
         content.addView(advancedPanel, wide().withTop(16.dp))
         content.addView(progress, wide().withTop(18.dp))
         content.addView(statusCard, wide().withTop(12.dp))
+        content.addView(itemList, wide().withTop(12.dp))
 
         buildAdvancedOptions()
         bindState()
@@ -168,6 +223,7 @@ class DownloadView(
                 urlDebounceJob?.cancel()
                 urlDebounceJob = owner?.lifecycleScope?.launch {
                     delay(350)
+                    AppLogger.d("URL input changed: ${text.trim().redactedUrlSummary()}")
                     applyAutoUiForUrl(text.trim())
                 }
             }
@@ -196,11 +252,9 @@ class DownloadView(
         }
 
         formatLabelView = label("Format")
-        formatGroup = toggleGroup(videoFormatLabels()) { index ->
-            selectedOutputFormat = videoFormats()[index]
-        }
+        formatGroup = formatToggleGroup(videoFormats(), AudioMode.VideoWithAudio)
 
-        qualityLabelView = label("Quality")
+        qualityLabelView = label("Video quality")
         qualityGroup = toggleGroup(VideoQuality.entries.map { it.label }) { index ->
             selectedQuality = VideoQuality.entries[index]
         }
@@ -208,6 +262,7 @@ class DownloadView(
         val audioLabel = label("Audio")
         audioGroup = toggleGroup(AudioMode.entries.map { it.label }) { index ->
             selectedAudioMode = AudioMode.entries[index]
+            applyUiForAudioMode(selectedAudioMode)
         }
 
         advancedPanel.addView(optionsTitle, wide())
@@ -275,6 +330,7 @@ class DownloadView(
 
     private fun startDownload(url: String) {
         val owner = context as? LifecycleOwner ?: return
+        downloadJob?.cancel()
         val normalized = url.trim()
         val options = DownloadOptions(
             outputFormat = selectedOutputFormat,
@@ -282,15 +338,33 @@ class DownloadView(
             audioMode = selectedAudioMode,
             audioQuality = selectedAudioQuality
         )
-        owner.lifecycleScope.launch {
-            downloader.download(normalized, options).collectLatest { state.value = it }
+        AppLogger.i("Download requested: ${normalized.redactedUrlSummary()}, options=$options")
+        downloadJob = owner.lifecycleScope.launch {
+            downloader.download(normalized, options).collectLatest {
+                AppLogger.d("Download state: ${it.logSummary()}")
+                state.value = it
+            }
         }
+    }
+
+    private fun stopDownload() {
+        AppLogger.i("Stop requested by user")
+        downloadJob?.cancel()
+        downloadJob = null
+        progress.visibility = View.GONE
+        stopButton.visibility = View.GONE
+        setStatus(
+            title = "Stopped",
+            subtitle = "Completed downloads are kept. Partial files are being removed.",
+            visible = true
+        )
     }
 
     private fun render(downloadState: DownloadState) {
         when (downloadState) {
             DownloadState.Idle -> {
                 progress.visibility = View.GONE
+                stopButton.visibility = View.GONE
                 // Keep whatever initial hint we showed; don't overwrite with a blank/placeholder state.
                 if (statusCard.visibility != View.VISIBLE) {
                     setStatus(title = "", subtitle = "", visible = false)
@@ -298,7 +372,9 @@ class DownloadView(
             }
             is DownloadState.Running -> {
                 progress.visibility = View.VISIBLE
+                stopButton.visibility = View.VISIBLE
                 progress.progress = downloadState.progress
+                renderItems(downloadState.items)
                 setStatus(
                     title = "Downloading",
                     subtitle = sanitizeProgressLine(downloadState.message).ifBlank { "Working…" },
@@ -307,20 +383,76 @@ class DownloadView(
             }
             is DownloadState.Finished -> {
                 progress.visibility = View.GONE
+                stopButton.visibility = View.GONE
                 setStatus(
                     title = "Saved",
                     subtitle = downloadState.fileName,
                     visible = true
                 )
             }
+            is DownloadState.Stopped -> {
+                progress.visibility = View.GONE
+                stopButton.visibility = View.GONE
+                setStatus(
+                    title = "Stopped",
+                    subtitle = "Completed downloads are kept. Removed partial files. Finished: ${downloadState.completedCount}",
+                    visible = true
+                )
+            }
             is DownloadState.Failed -> {
                 progress.visibility = View.GONE
+                stopButton.visibility = View.GONE
                 setStatus(
                     title = "Couldn’t download",
                     subtitle = downloadState.reason,
                     visible = true
                 )
             }
+        }
+    }
+
+    private fun renderItems(items: List<DownloadItem>) {
+        itemList.removeAllViews()
+        if (items.isEmpty()) {
+            itemList.visibility = View.GONE
+            return
+        }
+
+        itemList.visibility = View.VISIBLE
+        itemList.addView(label("Playlist progress"), wide())
+
+        val activeItems = items.filter { it.status == DownloadItemStatus.Running }.takeLast(4)
+        val finishedItems = items.filter { it.status == DownloadItemStatus.Finished }.takeLast(8)
+
+        activeItems.forEach { item ->
+            itemList.addView(itemRow(item), wide().withTop(8.dp))
+        }
+
+        if (finishedItems.isNotEmpty()) {
+            itemList.addView(label("Downloaded"), wide().withTop(14.dp))
+        }
+
+        finishedItems.forEach { item ->
+            itemList.addView(itemRow(item), wide().withTop(8.dp))
+        }
+    }
+
+    private fun itemRow(item: DownloadItem): LinearLayout {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            val title = TextView(context).apply {
+                text = item.titleLine()
+                textSize = 14f
+                setTextColor(0xFF17201D.toInt())
+            }
+            val file = TextView(context).apply {
+                text = item.fileName.orEmpty()
+                textSize = 12f
+                setTextColor(0xFF58635F.toInt())
+                visibility = if (item.fileName.isNullOrBlank()) View.GONE else View.VISIBLE
+            }
+            addView(title, wide())
+            addView(file, wide().withTop(2.dp))
         }
     }
 
@@ -365,17 +497,32 @@ class DownloadView(
 
     private fun applyAutoUiForUrl(url: String) {
         val isAudioFirst = LinkClassifier.isAudioFirst(url)
+        AppLogger.d("Applying URL defaults: ${url.redactedUrlSummary()}, audioFirst=$isAudioFirst")
 
         if (isAudioFirst) {
             // Switch to audio-only mode with audio-only formats; quality isn't meaningful.
             selectedAudioMode = AudioMode.AudioOnly
             setAudioModeSelection(AudioMode.AudioOnly)
-            setFormatChoices(audioFormats(), OutputFormat.M4a)
-            setQualityModeAudio()
         } else {
+            selectedAudioMode = AudioMode.VideoWithAudio
             setAudioModeSelection(AudioMode.VideoWithAudio)
-            setFormatChoices(videoFormats(), OutputFormat.Mp4)
-            setQualityModeVideo()
+        }
+    }
+
+    private fun applyUiForAudioMode(mode: AudioMode) {
+        AppLogger.d(
+            "Audio mode selected: mode=$mode, rememberedVideoFormat=$selectedVideoFormat, rememberedAudioFormat=$selectedAudioFormat"
+        )
+        when (mode) {
+            AudioMode.AudioOnly -> {
+                setFormatChoices(audioFormats(), selectedAudioFormat, AudioMode.AudioOnly)
+                setQualityModeAudio()
+            }
+            AudioMode.VideoWithAudio,
+            AudioMode.VideoOnly -> {
+                setFormatChoices(videoFormats(), selectedVideoFormat, mode)
+                setQualityModeVideo()
+            }
         }
     }
 
@@ -386,7 +533,7 @@ class DownloadView(
     }
 
     private fun setQualityModeVideo() {
-        qualityLabelView.text = "Quality"
+        qualityLabelView.text = "Video quality"
         replaceQualityChoices(VideoQuality.entries.map { it.label }) { index ->
             selectedQuality = VideoQuality.entries[index]
         }
@@ -411,11 +558,13 @@ class DownloadView(
         parent.addView(qualityGroup, qualityIndex, wide().withTop(8.dp))
     }
 
-    private fun setFormatChoices(formats: List<OutputFormat>, desired: OutputFormat) {
+    private fun setFormatChoices(
+        formats: List<OutputFormat>,
+        desired: OutputFormat,
+        mode: AudioMode
+    ) {
         advancedPanel.removeView(formatGroup)
-        formatGroup = toggleGroup(formats.map { it.label }) { index ->
-            selectedOutputFormat = formats[index]
-        }
+        formatGroup = formatToggleGroup(formats, mode)
         // Re-insert after the "Format" label (which is always right before it).
         val formatLabelIndex = advancedPanel.indexOfChild(formatLabelView)
         advancedPanel.addView(formatGroup, formatLabelIndex + 1, wide().withTop(8.dp))
@@ -426,13 +575,57 @@ class DownloadView(
         selectedOutputFormat = formats[selected]
     }
 
-    private fun videoFormats(): List<OutputFormat> =
-        listOf(OutputFormat.Original, OutputFormat.Mp4, OutputFormat.Mov, OutputFormat.Mkv)
+    private fun formatToggleGroup(
+        formats: List<OutputFormat>,
+        mode: AudioMode
+    ): MaterialButtonToggleGroup {
+        return toggleGroup(formats.map { it.label }) { index ->
+            val selectedFormat = formats[index]
+            selectedOutputFormat = selectedFormat
+            when (mode) {
+                AudioMode.AudioOnly -> {
+                    selectedAudioFormat = selectedFormat
+                    AppLogger.d("Format selected: mode=$mode, format=$selectedFormat")
+                }
+                AudioMode.VideoWithAudio,
+                AudioMode.VideoOnly -> {
+                    selectedVideoFormat = selectedFormat
+                    AppLogger.d("Format selected: mode=$mode, format=$selectedFormat")
+                }
+            }
+        }
+    }
 
-    private fun videoFormatLabels(): List<String> = videoFormats().map { it.label }
+    private fun String.redactedUrlSummary(): String {
+        if (isBlank()) return "blank"
+        val host = runCatching { java.net.URI(this).host }.getOrNull()
+        return "length=$length, host=${host ?: "unknown"}"
+    }
+
+    private fun DownloadState.logSummary(): String {
+        return when (this) {
+            DownloadState.Idle -> "Idle"
+            is DownloadState.Running -> "Running(progress=$progress, messageLength=${message.length})"
+            is DownloadState.Finished -> "Finished(fileName=$fileName)"
+            is DownloadState.Stopped -> "Stopped(completedCount=$completedCount)"
+            is DownloadState.Failed -> "Failed(reasonLength=${reason.length})"
+        }
+    }
+
+    private fun DownloadItem.titleLine(): String {
+        val totalLabel = total?.let { "/$it" }.orEmpty()
+        val statusLabel = when (status) {
+            DownloadItemStatus.Running -> "$progress%"
+            DownloadItemStatus.Finished -> "Done"
+        }
+        return "$index$totalLabel  $statusLabel  $title"
+    }
+
+    private fun videoFormats(): List<OutputFormat> =
+        listOf(OutputFormat.Original, OutputFormat.Mp4, OutputFormat.Mov, OutputFormat.Mkv, OutputFormat.Webm)
 
     private fun audioFormats(): List<OutputFormat> =
-        listOf(OutputFormat.Original, OutputFormat.M4a, OutputFormat.Mp3, OutputFormat.Ogg, OutputFormat.Wav)
+        listOf(OutputFormat.Original, OutputFormat.Mp3, OutputFormat.Wav, OutputFormat.Ogg, OutputFormat.M4a)
 
     private fun roundedBackground(color: Int, radius: Float): GradientDrawable {
         return GradientDrawable().apply {
