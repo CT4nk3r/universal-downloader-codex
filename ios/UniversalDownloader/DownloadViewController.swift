@@ -31,35 +31,44 @@ final class DownloadViewController: UIHostingController<DownloadScreen> {
 struct DownloadScreen: View {
     @ObservedObject var viewModel: DownloadViewModel
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 68), spacing: 7)
-    ]
-
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                topBar
-                subtitle
-                urlField
-                primaryActions
+        NavigationStack {
+            Form {
+                linkSection
+
                 if viewModel.optionsOpen {
-                    optionsPanel
+                    optionsSection
                 }
-                if viewModel.progressVisible {
-                    ProgressView(value: viewModel.progress, total: 100)
-                        .tint(.appGreen)
-                        .padding(.vertical, 2)
-                        .accessibilityIdentifier("download.progress")
-                }
-                statusPanel
-                playlistPanel
+
+                statusSection
+                activePlaylistSection
+                finishedPlaylistSection
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 22)
+            .formStyle(.grouped)
+            .navigationTitle("Universal Downloader")
+            .toolbar {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            viewModel.optionsOpen.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .accessibilityLabel(viewModel.optionsOpen ? "Hide Options" : "Show Options")
+                    .accessibilityIdentifier("download.optionsToggle")
+
+                    Button {
+                        viewModel.showingAbout = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                    }
+                    .accessibilityLabel("About")
+                }
+            }
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(Color.appBackground.ignoresSafeArea())
+        .tint(.accentColor)
         .alert("Universal Downloader", isPresented: $viewModel.showingAbout) {
             Button("Email logs") { viewModel.shareLogs(emailOnly: true) }
             Button("Share logs") { viewModel.shareLogs(emailOnly: false) }
@@ -77,213 +86,132 @@ struct DownloadScreen: View {
         }
     }
 
-    private var topBar: some View {
-        HStack(spacing: 12) {
-            Text("Universal Downloader")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(Color.primaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-                .accessibilityIdentifier("download.title")
-            Spacer(minLength: 8)
+    private var linkSection: some View {
+        Section {
+            TextField("Video link", text: $viewModel.urlText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+                .submitLabel(.done)
+                .accessibilityIdentifier("download.urlField")
+                .onChange(of: viewModel.urlText) { newValue in
+                    viewModel.urlChanged(newValue)
+                }
+
             Button {
-                viewModel.showingAbout = true
+                viewModel.downloadTapped()
             } label: {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 19, weight: .semibold))
-                    .frame(width: 36, height: 36)
+                Label("Download", systemImage: "arrow.down.circle.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: 34)
             }
-            .buttonStyle(PlainIconButtonStyle())
-            .accessibilityLabel("About")
-        }
-        .padding(.top, 4)
-        .padding(.bottom, 2)
-    }
-
-    private var subtitle: some View {
-        Text("Paste a link or share one into the app.")
-            .font(.system(size: 13))
-            .foregroundStyle(Color.secondaryText)
-    }
-
-    private var urlField: some View {
-        TextField("Video link", text: $viewModel.urlText)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .keyboardType(.URL)
-            .submitLabel(.done)
-            .accessibilityIdentifier("download.urlField")
-            .font(.system(size: 16))
-            .padding(.horizontal, 12)
-            .frame(minHeight: 44)
-            .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.softBorder, lineWidth: 1)
-            )
-            .onChange(of: viewModel.urlText) { newValue in
-                viewModel.urlChanged(newValue)
-            }
-    }
-
-    private var downloadButton: some View {
-        Button {
-            viewModel.downloadTapped()
-        } label: {
-            Text("Download")
-                .font(.system(size: 15, weight: .semibold))
-                .frame(maxWidth: .infinity, minHeight: 44)
-        }
-        .buttonStyle(FilledButtonStyle())
-        .accessibilityIdentifier("download.primaryButton")
-    }
-
-    private var primaryActions: some View {
-        HStack(spacing: 10) {
-            downloadButton
-            optionsToggle
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .accessibilityIdentifier("download.primaryButton")
+        } footer: {
+            Text("Paste a link or share one into the app.")
         }
     }
 
-    private var optionsToggle: some View {
-        Button {
-            withAnimation(.snappy) {
-                viewModel.optionsOpen.toggle()
-            }
-        } label: {
-            Label(viewModel.optionsOpen ? "Hide" : "Options", systemImage: viewModel.optionsOpen ? "chevron.up" : "slider.horizontal.3")
-                .font(.system(size: 15, weight: .medium))
-                .labelStyle(.titleAndIcon)
-                .frame(width: 112, height: 44)
-        }
-        .buttonStyle(OutlineButtonStyle())
-        .accessibilityIdentifier("download.optionsToggle")
-    }
-
-    private var optionsPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Download options")
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(Color.primaryText)
-
-            optionSection("Format") {
-                LazyVGrid(columns: columns, spacing: 8) {
-                    ForEach(viewModel.availableFormats, id: \.self) { format in
-                        OptionChip(
-                            title: format.rawValue,
-                            isSelected: viewModel.selectedOutputFormat == format
-                        ) {
-                            viewModel.select(format: format)
-                        }
-                    }
+    private var optionsSection: some View {
+        Section("Download Options") {
+            Picker("Audio", selection: audioModeBinding) {
+                ForEach(AudioMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
                 }
             }
+            .pickerStyle(.segmented)
 
-            optionSection(viewModel.selectedAudioMode == .audioOnly ? "Audio quality" : "Video quality") {
-                LazyVGrid(columns: columns, spacing: 8) {
-                    if viewModel.selectedAudioMode == .audioOnly {
-                        ForEach(AudioQuality.allCases, id: \.self) { quality in
-                            OptionChip(
-                                title: quality.rawValue,
-                                isSelected: viewModel.selectedAudioQuality == quality
-                            ) {
-                                viewModel.selectedAudioQuality = quality
-                            }
-                        }
-                    } else {
-                        ForEach(VideoQuality.allCases, id: \.self) { quality in
-                            OptionChip(
-                                title: quality.rawValue,
-                                isSelected: viewModel.selectedQuality == quality
-                            ) {
-                                viewModel.selectedQuality = quality
-                            }
-                        }
-                    }
+            Picker("Format", selection: formatBinding) {
+                ForEach(viewModel.availableFormats, id: \.self) { format in
+                    Text(format.rawValue).tag(format)
                 }
             }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("optionPicker.format")
 
-            optionSection("Audio") {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 7)], spacing: 7) {
-                    ForEach(AudioMode.allCases, id: \.self) { mode in
-                        OptionChip(
-                            title: mode.rawValue,
-                            isSelected: viewModel.selectedAudioMode == mode
-                        ) {
-                            viewModel.select(audioMode: mode)
-                        }
+            if viewModel.selectedAudioMode == .audioOnly {
+                Picker("Audio Quality", selection: $viewModel.selectedAudioQuality) {
+                    ForEach(AudioQuality.allCases, id: \.self) { quality in
+                        Text(quality.rawValue).tag(quality)
+                    }
+                }
+            } else {
+                Picker("Video Quality", selection: $viewModel.selectedQuality) {
+                    ForEach(VideoQuality.allCases, id: \.self) { quality in
+                        Text(quality.rawValue).tag(quality)
                     }
                 }
             }
         }
-        .cardStyle(cornerRadius: 14, padding: 12)
     }
 
-    private func optionSection<Content: View>(
-        _ title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color.secondaryText)
-            content()
-        }
+    private var audioModeBinding: Binding<AudioMode> {
+        Binding(
+            get: { viewModel.selectedAudioMode },
+            set: { viewModel.select(audioMode: $0) }
+        )
     }
 
-    @ViewBuilder private var statusPanel: some View {
+    private var formatBinding: Binding<OutputFormat> {
+        Binding(
+            get: { viewModel.selectedOutputFormat },
+            set: { viewModel.select(format: $0) }
+        )
+    }
+
+    @ViewBuilder private var statusSection: some View {
         if viewModel.statusVisible {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(viewModel.statusTitle)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Color.primaryText)
-                    .accessibilityIdentifier("download.statusTitle")
-                Text(viewModel.statusSubtitle)
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.secondaryText)
-                    .lineLimit(3)
-                    .accessibilityIdentifier("download.statusSubtitle")
+            Section("Status") {
+                if viewModel.progressVisible {
+                    ProgressView(value: viewModel.progress, total: 100)
+                        .accessibilityIdentifier("download.progress")
+                }
+
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: viewModel.statusSymbol)
+                        .font(.title3)
+                        .foregroundStyle(viewModel.statusTint)
+                        .frame(width: 26)
+                        .padding(.top, 1)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(viewModel.statusTitle)
+                            .font(.headline)
+                            .accessibilityIdentifier("download.statusTitle")
+                        Text(viewModel.statusSubtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                            .accessibilityIdentifier("download.statusSubtitle")
+                    }
+                }
+
                 if viewModel.stopVisible {
-                    Button {
+                    Button(role: .destructive) {
                         viewModel.stopDownload()
                     } label: {
-                        Text("Stop")
-                            .font(.system(size: 15, weight: .medium))
-                            .frame(maxWidth: .infinity, minHeight: 42)
+                        Label("Stop Download", systemImage: "xmark.circle")
                     }
-                    .buttonStyle(StopButtonStyle())
-                    .padding(.top, 8)
                     .accessibilityIdentifier("download.stopButton")
                 }
             }
-            .cardStyle(cornerRadius: 14, padding: 12)
         }
     }
 
-    @ViewBuilder private var playlistPanel: some View {
-        if !viewModel.items.isEmpty {
-            VStack(alignment: .leading, spacing: 9) {
-                Text("Playlist progress")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Color.secondaryText)
-
-                ForEach(viewModel.activeItems, id: \.index) { item in
-                    DownloadItemRow(item: item)
-                }
-
-                if !viewModel.finishedItems.isEmpty {
-                    Text("Downloaded")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Color.secondaryText)
-                        .padding(.top, 4)
-                }
-
-                ForEach(viewModel.finishedItems, id: \.index) { item in
-                    DownloadItemRow(item: item)
-                }
+    @ViewBuilder private var activePlaylistSection: some View {
+        if !viewModel.activeItems.isEmpty {
+            Section("Playlist Progress") {
+                ForEach(viewModel.activeItems, id: \.index, content: DownloadItemRow.init)
             }
-            .cardStyle(cornerRadius: 14, padding: 12)
+        }
+    }
+
+    @ViewBuilder private var finishedPlaylistSection: some View {
+        if !viewModel.finishedItems.isEmpty {
+            Section("Downloaded") {
+                ForEach(viewModel.finishedItems, id: \.index, content: DownloadItemRow.init)
+            }
         }
     }
 }
@@ -471,38 +399,18 @@ final class DownloadViewModel: ObservableObject {
 
 }
 
-struct OptionChip: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .frame(maxWidth: .infinity)
-                .frame(height: 34)
-        }
-        .buttonStyle(ChipButtonStyle(isSelected: isSelected))
-        .accessibilityIdentifier("optionChip.\(title)")
-    }
-}
-
 struct DownloadItemRow: View {
     let item: DownloadItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(item.titleLine)
-                .font(.system(size: 15))
-                .foregroundStyle(Color.primaryText)
+                .font(.body)
                 .lineLimit(2)
             if let fileName = item.fileName, !fileName.isEmpty {
                 Text(fileName)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.secondaryText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
         }
@@ -580,90 +488,36 @@ private extension DownloadItem {
     }
 }
 
-private extension View {
-    func cardStyle(cornerRadius: CGFloat, padding: CGFloat) -> some View {
-        self
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Color.softBorder, lineWidth: 1)
-            )
+private extension DownloadViewModel {
+    var statusSymbol: String {
+        switch statusTitle {
+        case "Downloading":
+            "arrow.down.circle.fill"
+        case "Saved":
+            "checkmark.circle.fill"
+        case "Stopped":
+            "pause.circle.fill"
+        case "Couldn’t download":
+            "exclamationmark.triangle.fill"
+        default:
+            "tray.and.arrow.down.fill"
+        }
     }
-}
 
-private struct FilledButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(Color.white)
-            .background(Color.appGreen.opacity(configuration.isPressed ? 0.78 : 1))
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    var statusTint: Color {
+        switch statusTitle {
+        case "Downloading":
+            .accentColor
+        case "Saved":
+            .green
+        case "Stopped":
+            .orange
+        case "Couldn’t download":
+            .red
+        default:
+            .secondary
+        }
     }
-}
-
-private struct OutlineButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(Color.appGreen)
-            .background(Color.white.opacity(configuration.isPressed ? 0.65 : 1))
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.outlineStrong, lineWidth: 2)
-            )
-    }
-}
-
-private struct StopButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(Color.stopRed)
-            .background(Color.white.opacity(configuration.isPressed ? 0.65 : 1))
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.outlineStrong, lineWidth: 2)
-            )
-    }
-}
-
-private struct PlainIconButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(Color.appGreen)
-            .background(Color.white.opacity(configuration.isPressed ? 0.65 : 1))
-            .clipShape(Circle())
-            .overlay(Circle().stroke(Color.softBorder, lineWidth: 1))
-    }
-}
-
-private struct ChipButtonStyle: ButtonStyle {
-    let isSelected: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(isSelected ? Color.appGreen : Color.primaryText)
-            .background(isSelected ? Color.selectedFill : Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.outlineStrong, lineWidth: isSelected ? 2 : 1)
-            )
-            .opacity(configuration.isPressed ? 0.75 : 1)
-    }
-}
-
-private extension Color {
-    static let appBackground = Color(red: 0.973, green: 0.980, blue: 0.969)
-    static let appGreen = Color(red: 0.129, green: 0.424, blue: 0.369)
-    static let primaryText = Color(red: 0.090, green: 0.125, blue: 0.114)
-    static let secondaryText = Color(red: 0.345, green: 0.388, blue: 0.373)
-    static let outlineStrong = Color(red: 0.612, green: 0.659, blue: 0.635)
-    static let softBorder = Color(red: 0.882, green: 0.906, blue: 0.890)
-    static let selectedFill = Color(red: 0.902, green: 0.949, blue: 0.937)
-    static let stopRed = Color(red: 0.608, green: 0.173, blue: 0.173)
 }
 
 private extension String {

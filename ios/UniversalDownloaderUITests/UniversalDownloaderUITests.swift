@@ -8,7 +8,7 @@ final class UniversalDownloaderUITests: XCTestCase {
     func testLaunchShowsDownloadSurface() {
         let app = launchApp()
 
-        XCTAssertTrue(app.staticTexts["download.title"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Universal Downloader"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.textFields["download.urlField"].exists)
         XCTAssertTrue(app.buttons["download.primaryButton"].exists)
         XCTAssertTrue(app.buttons["download.optionsToggle"].exists)
@@ -21,9 +21,9 @@ final class UniversalDownloaderUITests: XCTestCase {
         enterURL("https://soundcloud.com/artist/track", in: app)
         app.buttons["download.optionsToggle"].tap()
 
-        XCTAssertTrue(app.buttons["optionChip.MP3"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.buttons["optionChip.M4A"].exists)
-        XCTAssertFalse(app.buttons["optionChip.MP4"].exists)
+        XCTAssertTrue(app.buttons["MP3"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["M4A"].exists)
+        XCTAssertFalse(app.buttons["MP4"].exists)
     }
 
     func testDownloadCompletesAndShowsSavedFile() {
