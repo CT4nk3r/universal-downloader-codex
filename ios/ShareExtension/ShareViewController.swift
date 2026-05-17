@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 final class ShareViewController: UIViewController {
     private let store = SharedLinkStore()
+    private var sharedURL: URL?
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
@@ -10,6 +11,7 @@ final class ShareViewController: UIViewController {
         extractSharedURL { [weak self] url in
             if let url {
                 self?.store.enqueue(url)
+                self?.sharedURL = url
                 self?.openContainingApp()
             }
             self?.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
@@ -42,6 +44,6 @@ final class ShareViewController: UIViewController {
     }
 
     private func openContainingApp() {
-        extensionContext?.open(AppConfig.openAppURL, completionHandler: nil)
+        extensionContext?.open(sharedURL.map(AppConfig.openAppURL(for:)) ?? AppConfig.openAppURL, completionHandler: nil)
     }
 }

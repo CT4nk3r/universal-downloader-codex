@@ -13,7 +13,8 @@ targets:
       - Shared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.universaldownloader.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.ct4nk3r.universaldownloader
+        DEVELOPMENT_TEAM: G5FY6A6X2G
         INFOPLIST_FILE: UniversalDownloader/Info.plist
         CODE_SIGN_ENTITLEMENTS: UniversalDownloader/UniversalDownloader.entitlements
     dependencies:
@@ -26,6 +27,7 @@ targets:
       - Shared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.universaldownloader.app.ShareExtension
+        PRODUCT_BUNDLE_IDENTIFIER: com.ct4nk3r.universaldownloader.ShareExtension
+        DEVELOPMENT_TEAM: G5FY6A6X2G
         INFOPLIST_FILE: ShareExtension/Info.plist
         CODE_SIGN_ENTITLEMENTS: ShareExtension/ShareExtension.entitlements
