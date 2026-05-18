@@ -11,12 +11,29 @@ import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.FileInputStream
 
 @RunWith(AndroidJUnit4::class)
 class DownloadViewE2eTest {
+    @Before
+    fun wakeAndUnlockDevice() {
+        val device = InstrumentationRegistry.getInstrumentation().uiAutomation
+        listOf(
+            "input keyevent KEYCODE_WAKEUP",
+            "wm dismiss-keyguard",
+            "input keyevent KEYCODE_MENU"
+        ).forEach { command ->
+            device.executeShellCommand(command).use { output ->
+                FileInputStream(output.fileDescriptor).use { it.readBytes() }
+            }
+        }
+    }
+
     @Test
     fun soundcloudSwitchesToAudioFirst() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->

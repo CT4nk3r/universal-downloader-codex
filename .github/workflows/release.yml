@@ -98,7 +98,11 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
-          script: cd android && ./gradlew connectedDebugAndroidTest --stacktrace
+          script: |
+            adb shell input keyevent KEYCODE_WAKEUP
+            adb shell wm dismiss-keyguard
+            adb shell input keyevent KEYCODE_MENU
+            cd android && ./gradlew connectedDebugAndroidTest --stacktrace
 
   ios-unit-tests:
     name: iOS unit tests

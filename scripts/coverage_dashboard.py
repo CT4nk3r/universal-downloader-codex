@@ -27,7 +27,16 @@ def android_summary(csv_path: Path) -> tuple[float, str]:
 def write_dashboard(output: Path, android_csv: Path, ios_html: Path | None) -> None:
     output.mkdir(parents=True, exist_ok=True)
     android_coverage, android_detail = android_summary(android_csv)
-    ios_link = '<a href="../ios/index.html">iOS coverage report</a>' if ios_html else "iOS report not provided"
+    ios_link = (
+        '<a href="../ios/index.html">iOS coverage report</a>'
+        if ios_html and ios_html.exists()
+        else "iOS report not provided"
+    )
+    android_link = (
+        '<a href="../android/html/index.html">Android JaCoCo HTML report</a>'
+        if android_csv.exists()
+        else "Android report not provided"
+    )
     (output / "index.html").write_text(
         f"""<!doctype html>
 <html lang="en">
@@ -46,7 +55,7 @@ def write_dashboard(output: Path, android_csv: Path, ios_html: Path | None) -> N
   <section>
     <h2>Android Unit Coverage</h2>
     <p><strong>{android_coverage:.2f}%</strong> - {html.escape(android_detail)}</p>
-    <p><a href="../android/html/index.html">Android JaCoCo HTML report</a></p>
+    <p>{android_link}</p>
   </section>
   <section>
     <h2>iOS Unit Coverage</h2>
