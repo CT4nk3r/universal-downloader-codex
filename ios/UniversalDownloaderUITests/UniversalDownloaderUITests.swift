@@ -19,7 +19,7 @@ final class UniversalDownloaderUITests: XCTestCase {
         let app = launchApp()
 
         enterURL("https://soundcloud.com/artist/track", in: app)
-        app.buttons["download.optionsToggle"].tap()
+        showOptions(in: app)
 
         XCTAssertTrue(app.buttons["MP3"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.buttons["M4A"].exists)
@@ -37,7 +37,16 @@ final class UniversalDownloaderUITests: XCTestCase {
         expectation(for: saved, evaluatedWith: statusTitle)
         waitForExpectations(timeout: 8)
 
-        XCTAssertEqual(app.staticTexts["download.statusSubtitle"].label, "demo track\ndemo_track.mp4")
+        XCTAssertEqual(
+            app.staticTexts["download.statusSubtitle"].label,
+            "demo track\nFiles > On My iPhone > Universal Downloader > Downloads > demo_track.mp4"
+        )
+    }
+
+    func testOptionsAreVisibleByDefault() {
+        let app = launchApp()
+
+        XCTAssertTrue(app.buttons["MP4"].waitForExistence(timeout: 2))
     }
 
     func testOptionsCanOpen() {

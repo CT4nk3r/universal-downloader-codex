@@ -1,4 +1,5 @@
 import MessageUI
+import QuickLook
 import SwiftUI
 import UIKit
 
@@ -100,6 +101,9 @@ struct DownloadScreen: View {
                 MailView(logURL: url)
             }
         }
+        .sheet(item: $viewModel.presentedPreview) { preview in
+            QuickLookPreview(url: preview.url)
+        }
     }
 
     private var linkSection: some View {
@@ -115,18 +119,16 @@ struct DownloadScreen: View {
                 }
 
             Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 viewModel.downloadTapped()
             } label: {
-                HStack(spacing: 7) {
-                    Image(systemName: "arrow.down.circle")
-                    Text("Download")
-                }
+                Label("Download", systemImage: "arrow.down.circle.fill")
                 .font(.body.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 44)
+                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.tint)
+            .buttonStyle(DownloadPrimaryButtonStyle())
             .contentShape(Rectangle())
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
             .accessibilityIdentifier("download.primaryButton")
         } footer: {
             Text("Paste a link or share one into the app.")
@@ -156,12 +158,14 @@ struct DownloadScreen: View {
                         Text(quality.rawValue).tag(quality)
                     }
                 }
+                .pickerStyle(.segmented)
             } else {
                 Picker("Video Quality", selection: $viewModel.selectedQuality) {
                     ForEach(VideoQuality.allCases, id: \.self) { quality in
                         Text(quality.rawValue).tag(quality)
                     }
                 }
+                .pickerStyle(.segmented)
             }
         } header: {
             Text("Download Options")
@@ -225,7 +229,7 @@ struct DownloadScreen: View {
     @ViewBuilder private var activePlaylistSection: some View {
         if !viewModel.activeItems.isEmpty {
             Section("Playlist Progress") {
-                ForEach(viewModel.activeItems, id: \.index, content: DownloadItemRow.init)
+                ForEach(viewModel.activeItems, id: \.identity, content: ActiveDownloadItemRow.init)
             }
         }
     }
@@ -233,7 +237,29 @@ struct DownloadScreen: View {
     @ViewBuilder private var finishedPlaylistSection: some View {
         if !viewModel.finishedItems.isEmpty {
             Section("Downloaded") {
-                ForEach(viewModel.finishedItems, id: \.index, content: DownloadItemRow.init)
+                ForEach(viewModel.finishedItems, id: \.identity) { item in
+                    Button {
+                        viewModel.preview(item)
+                    } label: {
+                        DownloadedItemRow(item: item)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            viewModel.delete(item)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+
+                        Button {
+                            viewModel.share(item)
+                        } label: {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
+                        .tint(.blue)
+                    }
+                }
             }
         }
     }
@@ -242,7 +268,7 @@ struct DownloadScreen: View {
 @MainActor
 final class DownloadViewModel: ObservableObject {
     @Published var urlText = ""
-    @Published var optionsOpen = false
+    @Published var optionsOpen = true
     @Published var progress: Double = 0
     @Published var progressVisible = false
     @Published var stopVisible = false
@@ -258,6 +284,7 @@ final class DownloadViewModel: ObservableObject {
     @Published var selectedAudioQuality: AudioQuality = .original
     @Published var showingAbout = false
     @Published var presentedShare: PresentedShare?
+    @Published var presentedPreview: PresentedPreview?
 
     private let downloader: YTDLPClient
     private let store = SharedLinkStore()
@@ -346,6 +373,40 @@ final class DownloadViewModel: ObservableObject {
         }
     }
 
+    func preview(_ item: DownloadItem) {
+        guard let url = existingFileURL(for: item) else {
+            AppLogger.warning("Preview requested for missing file: \(item.fileName ?? "unknown")")
+            setStatus(title: "File unavailable", subtitle: "The downloaded file is no longer in the app's Downloads folder.", visible: true)
+            return
+        }
+
+        presentedPreview = PresentedPreview(url: url)
+    }
+
+    func share(_ item: DownloadItem) {
+        guard let url = existingFileURL(for: item) else {
+            AppLogger.warning("Share requested for missing file: \(item.fileName ?? "unknown")")
+            setStatus(title: "File unavailable", subtitle: "The downloaded file is no longer in the app's Downloads folder.", visible: true)
+            return
+        }
+
+        presentedShare = .activity(url)
+    }
+
+    func delete(_ item: DownloadItem) {
+        guard let url = fileURL(for: item) else { return }
+
+        do {
+            try DownloadFileStore.delete(url)
+            items.removeAll { $0.identity == item.identity }
+            AppLogger.info("Deleted downloaded file: \(url.lastPathComponent)")
+            setStatus(title: "Deleted", subtitle: url.lastPathComponent, visible: true)
+        } catch {
+            AppLogger.error("Failed to delete downloaded file", error: error)
+            setStatus(title: "Couldn’t delete", subtitle: error.localizedDescription, visible: true)
+        }
+    }
+
     private func startDownload(_ url: URL) {
         downloadTask?.cancel()
         let options = DownloadOptions(
@@ -384,9 +445,11 @@ final class DownloadViewModel: ObservableObject {
             self.items = items
             setStatus(title: "Downloading", subtitle: ProgressLineSanitizer.sanitize(message), visible: true)
         case .finished(let fileName, let title):
+            markFileSaved(fileName: fileName, title: title)
             progressVisible = false
             stopVisible = false
-            let subtitle = title.map { "\($0)\n\(fileName)" } ?? fileName
+            let fileURL = DownloadFileStore.fileURL(named: fileName)
+            let subtitle = title.map { "\($0)\n\(DownloadFileStore.displayPath(for: fileURL))" } ?? DownloadFileStore.displayPath(for: fileURL)
             setStatus(title: "Saved", subtitle: subtitle, visible: true)
         case .stopped(let completedCount):
             progressVisible = false
@@ -425,9 +488,51 @@ final class DownloadViewModel: ObservableObject {
         }
     }
 
+    private func markFileSaved(fileName: String, title: String?) {
+        let fileURL = DownloadFileStore.fileURL(named: fileName)
+        if let index = items.lastIndex(where: { item in
+            item.fileName == fileName || title.map { item.title == $0 } == true
+        }) {
+            items[index].fileName = fileName
+            items[index].fileURL = fileURL
+            items[index].progress = 100
+            items[index].status = .finished
+        } else {
+            let nextIndex = (items.map(\.index).max() ?? 0) + 1
+            items.append(
+                DownloadItem(
+                    index: nextIndex,
+                    total: nil,
+                    title: title ?? fileName,
+                    fileName: fileName,
+                    fileURL: fileURL,
+                    progress: 100,
+                    status: .finished
+                )
+            )
+        }
+    }
+
+    private func existingFileURL(for item: DownloadItem) -> URL? {
+        guard let url = fileURL(for: item),
+              FileManager.default.fileExists(atPath: url.path)
+        else {
+            return nil
+        }
+        return url
+    }
+
+    private func fileURL(for item: DownloadItem) -> URL? {
+        if let fileURL = item.fileURL {
+            return fileURL
+        }
+
+        return item.fileName.map(DownloadFileStore.fileURL(named:))
+    }
+
 }
 
-struct DownloadItemRow: View {
+struct ActiveDownloadItemRow: View {
     let item: DownloadItem
 
     var body: some View {
@@ -442,6 +547,69 @@ struct DownloadItemRow: View {
                     .lineLimit(2)
             }
         }
+    }
+}
+
+struct DownloadedItemRow: View {
+    let item: DownloadItem
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "doc.fill")
+                .font(.title3)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 24)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                if let fileName = item.fileName, !fileName.isEmpty {
+                    Text(fileName)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                if let fileURL = item.fileURL {
+                    Text(DownloadFileStore.displayPath(for: fileURL))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .padding(.top, 5)
+        }
+        .padding(.vertical, 5)
+    }
+}
+
+struct DownloadPrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, minHeight: 42)
+            .background {
+                Capsule()
+                    .fill(Color.accentColor.opacity(configuration.isPressed ? 0.18 : 0.10))
+            }
+            .overlay {
+                Capsule()
+                    .stroke(Color.accentColor.opacity(configuration.isPressed ? 0.36 : 0.24), lineWidth: 1)
+            }
+            .foregroundStyle(.tint)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.spring(response: 0.18, dampingFraction: 0.72), value: configuration.isPressed)
     }
 }
 
@@ -504,7 +672,54 @@ enum PresentedShare: Identifiable {
     }
 }
 
+struct PresentedPreview: Identifiable {
+    let url: URL
+
+    var id: String {
+        url.path
+    }
+}
+
+struct QuickLookPreview: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(url: url)
+    }
+
+    func makeUIViewController(context: Context) -> QLPreviewController {
+        let controller = QLPreviewController()
+        controller.dataSource = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: QLPreviewController, context: Context) {
+        context.coordinator.url = url
+        uiViewController.reloadData()
+    }
+
+    final class Coordinator: NSObject, QLPreviewControllerDataSource {
+        var url: URL
+
+        init(url: URL) {
+            self.url = url
+        }
+
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
+            1
+        }
+
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+            url as NSURL
+        }
+    }
+}
+
 private extension DownloadItem {
+    var identity: String {
+        "\(index)-\(fileName ?? title)-\(total ?? 0)"
+    }
+
     var titleLine: String {
         let totalLabel = total.map { "/\($0)" } ?? ""
         let statusLabel: String
@@ -527,6 +742,10 @@ private extension DownloadViewModel {
             "pause.circle.fill"
         case "Couldn’t download":
             "exclamationmark.triangle.fill"
+        case "Deleted":
+            "trash.circle.fill"
+        case "File unavailable", "Couldn’t delete":
+            "exclamationmark.triangle.fill"
         default:
             "tray.and.arrow.down.fill"
         }
@@ -541,6 +760,10 @@ private extension DownloadViewModel {
         case "Stopped":
             .orange
         case "Couldn’t download":
+            .red
+        case "Deleted":
+            .secondary
+        case "File unavailable", "Couldn’t delete":
             .red
         default:
             .secondary
