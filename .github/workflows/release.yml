@@ -173,6 +173,63 @@ jobs:
             -only-testing:UniversalDownloaderUITests \
             -resultBundlePath build/ios/UniversalDownloaderUITests.xcresult
 
+  ios-sideload-ipa:
+    name: Build unsigned iOS IPA
+    runs-on: macos-latest
+    needs:
+      - ios-unit-tests
+      - ios-e2e-tests
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+        working-directory: ios
+
+      - name: Build unsigned device app
+        run: |
+          xcodebuild build \
+            -project ios/UniversalDownloader.xcodeproj \
+            -scheme UniversalDownloader \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build/ios-derived \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Package unsigned IPA
+        run: |
+          app_path="build/ios-derived/Build/Products/Release-iphoneos/UniversalDownloader.app"
+          ipa_path="build/UniversalDownloader-${{ inputs.version }}-unsigned.ipa"
+
+          if [ ! -d "$app_path" ]; then
+            echo "::error::Expected app bundle was not created at $app_path"
+            exit 1
+          fi
+
+          rm -rf build/ios-ipa
+          mkdir -p build/ios-ipa/Payload
+          cp -R "$app_path" build/ios-ipa/Payload/
+          (cd build/ios-ipa && /usr/bin/zip -qry "../UniversalDownloader-${{ inputs.version }}-unsigned.ipa" Payload)
+          shasum -a 256 "$ipa_path" | tee "$ipa_path.sha256"
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-ios-ipa
+          path: |
+            build/UniversalDownloader-${{ inputs.version }}-unsigned.ipa
+            build/UniversalDownloader-${{ inputs.version }}-unsigned.ipa.sha256
+          retention-days: 90
+
   signed-apk-release:
     name: Sign APK, tag, and publish release
     runs-on: ubuntu-latest
@@ -182,6 +239,7 @@ jobs:
       - android-e2e-tests
       - ios-unit-tests
       - ios-e2e-tests
+      - ios-sideload-ipa
 
     steps:
       - name: Checkout repository
@@ -244,6 +302,12 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
+      - name: Download unsigned iOS IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: unsigned-ios-ipa
+          path: release-assets/ios
+
       - name: Compute release hash and notes
         id: hash
         run: |
@@ -257,6 +321,12 @@ jobs:
           Android APK SHA-256:
 
           \`$hash\`
+
+          Unsigned iOS IPA for AltStore/Sideloadly:
+
+          \`UniversalDownloader-${{ inputs.version }}-unsigned.ipa\`
+
+          The iOS IPA is not App Store signed. Installers such as AltStore or Sideloadly must re-sign it with the user's Apple ID before it can run on a device.
           EOF
 
       - name: Create and push release tag
@@ -275,19 +345,23 @@ jobs:
           gh release create "${{ inputs.version }}" \
             "android/app/build/outputs/apk/release/app-release.apk#UniversalDownloader-${{ inputs.version }}.apk" \
             "app-release.apk.sha256#UniversalDownloader-${{ inputs.version }}.apk.sha256" \
+            "release-assets/ios/UniversalDownloader-${{ inputs.version }}-unsigned.ipa#UniversalDownloader-${{ inputs.version }}-unsigned.ipa" \
+            "release-assets/ios/UniversalDownloader-${{ inputs.version }}-unsigned.ipa.sha256#UniversalDownloader-${{ inputs.version }}-unsigned.ipa.sha256" \
             --title "Universal Downloader ${{ inputs.version }}" \
             --notes-file release-notes.md \
             $prerelease_flag
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Upload signed APK artifact
+      - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: signed-release-apk
+          name: release-assets
           path: |
             android/app/build/outputs/apk/release/app-release.apk
             app-release.apk.sha256
+            release-assets/ios/UniversalDownloader-${{ inputs.version }}-unsigned.ipa
+            release-assets/ios/UniversalDownloader-${{ inputs.version }}-unsigned.ipa.sha256
           retention-days: 90
 
       - name: Clean up keystore

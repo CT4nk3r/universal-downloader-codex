@@ -16,12 +16,13 @@ The release workflow:
 - runs Android unit tests,
 - runs Android e2e tests,
 - runs iOS unit and UI tests,
+- builds an unsigned iOS `.ipa` for AltStore/Sideloadly-style sideloading,
 - validates Android signing secrets,
 - builds the signed Android APK,
 - computes the APK SHA-256 hash,
 - creates and pushes the release tag,
 - creates a GitHub Release,
-- uploads the APK and `.sha256` file.
+- uploads the APK, unsigned IPA, and `.sha256` files.
 
 ## Required Secrets
 
@@ -41,3 +42,9 @@ export KEY_PASSWORD=your_key_password
 cd android
 ./gradlew testReleaseUnitTest assembleRelease
 ```
+
+## Unsigned iOS IPA
+
+The GitHub Release includes `UniversalDownloader-<version>-unsigned.ipa`.
+
+This file is not App Store signed and does not require an Apple Developer Program account to produce. It is intended for tools such as AltStore or Sideloadly, which re-sign the IPA locally with the user's Apple ID before installing it on a device. Free Apple ID signing usually needs to be refreshed after about 7 days.

@@ -49,6 +49,6 @@ Update the App Group in `project.yml`, `AppConfig.swift`, and the extension enti
 
 ## Tests and releases
 
-Pull requests run Android release-variant unit tests, Android e2e tests, iOS unit/UI tests, and coverage reporting. Manual releases are created from **Actions** -> **Release** with a version like `v0.4.0`; the workflow signs the Android APK, creates the tag, publishes the GitHub Release, and includes the APK SHA-256 hash.
+Pull requests run Android release-variant unit tests, Android e2e tests, iOS unit/UI tests, and coverage reporting. Manual releases are created from **Actions** -> **Release** with a version like `v0.4.0`; the workflow signs the Android APK, builds an unsigned iOS IPA for AltStore/Sideloadly-style sideloading, creates the tag, publishes the GitHub Release, and includes SHA-256 hashes.
 
 See `.github/ANDROID_BUILD_PIPELINE.md` and `docs/wiki/Testing-and-Coverage.md` for setup details.
