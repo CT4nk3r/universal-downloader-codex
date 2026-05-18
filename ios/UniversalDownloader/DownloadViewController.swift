@@ -6,14 +6,14 @@ final class DownloadViewController: UIHostingController<DownloadScreen> {
     private let viewModel: DownloadViewModel
 
     init() {
-        let viewModel = DownloadViewModel()
+        let viewModel = Self.makeViewModel()
         self.viewModel = viewModel
         super.init(rootView: DownloadScreen(viewModel: viewModel))
         view.backgroundColor = .clear
     }
 
     @MainActor required dynamic init?(coder aDecoder: NSCoder) {
-        let viewModel = DownloadViewModel()
+        let viewModel = Self.makeViewModel()
         self.viewModel = viewModel
         super.init(coder: aDecoder, rootView: DownloadScreen(viewModel: viewModel))
         view.backgroundColor = .clear
@@ -25,6 +25,22 @@ final class DownloadViewController: UIHostingController<DownloadScreen> {
 
     func process(sharedURL url: URL) {
         viewModel.process(sharedURL: url)
+    }
+
+    private static func makeViewModel() -> DownloadViewModel {
+        guard ProcessInfo.processInfo.arguments.contains("--ui-testing") else {
+            return DownloadViewModel()
+        }
+
+        return DownloadViewModel(
+            downloader: YTDLPClient(metadataResolver: UITestingMetadataResolver())
+        )
+    }
+}
+
+private struct UITestingMetadataResolver: MediaMetadataResolving {
+    func title(for url: URL) async -> String? {
+        nil
     }
 }
 
@@ -243,12 +259,16 @@ final class DownloadViewModel: ObservableObject {
     @Published var showingAbout = false
     @Published var presentedShare: PresentedShare?
 
-    private let downloader = YTDLPClient()
+    private let downloader: YTDLPClient
     private let store = SharedLinkStore()
     private var downloadTask: Task<Void, Never>?
 
     private let videoFormats: [OutputFormat] = [.source, .mp4, .mov, .mkv, .webm]
     private let audioFormats: [OutputFormat] = [.source, .mp3, .wav, .ogg, .m4a]
+
+    init(downloader: YTDLPClient = YTDLPClient()) {
+        self.downloader = downloader
+    }
 
     var availableFormats: [OutputFormat] {
         selectedAudioMode == .audioOnly ? audioFormats : videoFormats

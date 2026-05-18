@@ -42,6 +42,26 @@ final class DownloadViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testDownloadTappedUsesInjectedDownloader() async throws {
+        let viewModel = DownloadViewModel(
+            downloader: YTDLPClient(metadataResolver: StubMetadataResolver(title: nil))
+        )
+
+        viewModel.urlText = "https://example.com/demo-track"
+        viewModel.downloadTapped()
+
+        let deadline = Date().addingTimeInterval(4)
+        while viewModel.statusTitle != "Saved" && Date() < deadline {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        XCTAssertEqual(viewModel.statusTitle, "Saved")
+        XCTAssertEqual(viewModel.statusSubtitle, "demo track\ndemo_track.mp4")
+        XCTAssertFalse(viewModel.progressVisible)
+        XCTAssertFalse(viewModel.stopVisible)
+    }
+
+    @MainActor
     func testPlaylistItemListsKeepMostRecentRows() {
         let viewModel = DownloadViewModel()
         viewModel.items = (1...10).map {
@@ -95,5 +115,13 @@ final class DownloadViewModelTests: XCTestCase {
         guard case .activity = viewModel.presentedShare else {
             return XCTFail("Expected activity share")
         }
+    }
+}
+
+private struct StubMetadataResolver: MediaMetadataResolving {
+    let title: String?
+
+    func title(for url: URL) async -> String? {
+        title
     }
 }
