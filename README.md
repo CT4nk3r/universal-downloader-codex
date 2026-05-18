@@ -14,6 +14,8 @@ Native mobile wrappers around `yt-dlp` style downloading for shared links from Y
   - Stores incoming links in an App Group queue.
   - Opens the host app to process downloads.
   - Uses a `YTDLPClient` abstraction so the executable/engine can be swapped safely.
+- `.github/workflows/`: Mobile CI plus the manual release workflow for signed Android APKs.
+- `docs/wiki/`: wiki-ready release, testing, roadmap, and troubleshooting pages.
 
 ## Important packaging note
 
@@ -43,3 +45,8 @@ open UniversalDownloader.xcodeproj
 
 Update the App Group in `project.yml`, `AppConfig.swift`, and the extension entitlements before running on a device.
 
+## Tests and releases
+
+Pull requests run Android release-variant unit tests, Android e2e tests, iOS unit/UI tests, and coverage reporting. Manual releases are created from **Actions** -> **Release** with a version like `v0.4.0`; the workflow signs the Android APK, creates the tag, publishes the GitHub Release, and includes the APK SHA-256 hash.
+
+See `.github/ANDROID_BUILD_PIPELINE.md` and `docs/wiki/Testing-and-Coverage.md` for setup details.

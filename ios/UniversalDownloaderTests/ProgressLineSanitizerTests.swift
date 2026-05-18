@@ -24,4 +24,18 @@ final class ProgressLineSanitizerTests: XCTestCase {
         XCTAssertEqual(output.count, 20)
         XCTAssertTrue(output.hasSuffix("..."))
     }
+
+    func testKeepsShortLineAfterTrim() {
+        XCTAssertEqual(ProgressLineSanitizer.sanitize("  Downloading media  "), "Downloading media")
+    }
+
+    func testTinyMaxLengthDoesNotAppendEllipsis() {
+        XCTAssertEqual(ProgressLineSanitizer.sanitize("abcdef", maxLength: 3), "abc")
+    }
+
+    func testTitleLikeProgressLineKeepsInternalPunctuation() {
+        let output = ProgressLineSanitizer.sanitize("[info] Track: Artist - Title (Live)")
+
+        XCTAssertEqual(output, "Track: Artist - Title (Live)")
+    }
 }

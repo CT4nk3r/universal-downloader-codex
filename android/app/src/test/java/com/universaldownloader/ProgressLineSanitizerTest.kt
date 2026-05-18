@@ -24,5 +24,23 @@ class ProgressLineSanitizerTest {
         assertTrue(out.length == 20)
         assertTrue(out.endsWith("..."))
     }
-}
 
+    @Test
+    fun blankLineReturnsEmptyString() {
+        assertEquals("", ProgressLineSanitizer.sanitize("   "))
+    }
+
+    @Test
+    fun collapsesWhitespace() {
+        val out = ProgressLineSanitizer.sanitize("[download]   42%    of    file")
+
+        assertEquals("42% of file", out)
+    }
+
+    @Test
+    fun keepsShortLineUntouchedAfterTrim() {
+        val out = ProgressLineSanitizer.sanitize("  Downloading media  ")
+
+        assertEquals("Downloading media", out)
+    }
+}

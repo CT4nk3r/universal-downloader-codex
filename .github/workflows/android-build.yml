@@ -1,4 +1,4 @@
-name: Android Build
+name: Mobile CI
 
 on:
   push:
@@ -11,9 +11,12 @@ on:
       - develop
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  build:
-    name: Build Android APK
+  android-release-tests:
+    name: Android release tests
     runs-on: ubuntu-latest
 
     steps:
@@ -23,31 +26,39 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: 'gradle'
+          java-version: "17"
+          distribution: temurin
+          cache: gradle
 
       - name: Grant execute permission for gradlew
         run: chmod +x ./android/gradlew
 
-      - name: Build debug APK
+      - name: Run release-variant unit tests and coverage
         run: |
           cd android
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew testDebugUnitTest testReleaseUnitTest assembleRelease jacocoTestReport jacocoCoverageVerification --stacktrace
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false
 
-      - name: Upload debug APK
+      - name: Upload Android unit test reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: android-unit-test-reports
+          path: android/app/build/reports/tests/
           retention-days: 30
 
-  build-release:
-    name: Build Signed Release APK
+      - name: Upload Android coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-coverage
+          path: android/app/build/reports/jacoco/jacocoTestReport/
+          retention-days: 30
+
+  android-e2e:
+    name: Android e2e tests
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
 
     steps:
       - name: Checkout repository
@@ -56,35 +67,125 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: 'gradle'
+          java-version: "17"
+          distribution: temurin
+          cache: gradle
 
       - name: Grant execute permission for gradlew
         run: chmod +x ./android/gradlew
 
-      - name: Decode keystore
+      - name: Enable KVM
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
-      - name: Build release APK
-        run: |
-          cd android
-          ./gradlew assembleRelease --stacktrace
-        env:
-          GRADLE_OPTS: -Dorg.gradle.daemon=false
-          KEYSTORE_FILE: release.keystore
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      - name: Run Android instrumentation tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          script: cd android && ./gradlew connectedDebugAndroidTest --stacktrace
 
-      - name: Upload release APK
+      - name: Upload Android e2e reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: android/app/build/outputs/apk/release/app-release.apk
-          retention-days: 90
+          name: android-e2e-reports
+          path: android/app/build/reports/androidTests/
+          retention-days: 30
 
-      - name: Clean up keystore
+  ios-tests:
+    name: iOS unit and e2e tests
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+        working-directory: ios
+
+      - name: Select simulator
+        id: simulator
+        run: echo "destination=$(python3 scripts/select_ios_destination.py)" >> "$GITHUB_OUTPUT"
+
+      - name: Run iOS unit and UI tests with coverage
+        run: |
+          mkdir -p build/ios
+          xcodebuild test \
+            -project ios/UniversalDownloader.xcodeproj \
+            -scheme UniversalDownloader \
+            -destination "${{ steps.simulator.outputs.destination }}" \
+            -enableCodeCoverage YES \
+            -resultBundlePath build/ios/UniversalDownloader.xcresult
+
+      - name: Export iOS coverage
+        run: |
+          mkdir -p build/coverage/ios
+          xcrun xccov view --report --json build/ios/UniversalDownloader.xcresult > build/coverage/ios/coverage.json
+          python3 scripts/ios_coverage_report.py \
+            --input build/coverage/ios/coverage.json \
+            --output build/coverage/ios \
+            --threshold 100 \
+            --include "/Shared/"
+
+      - name: Upload iOS test result bundle
         if: always()
-        run: rm -f android/app/release.keystore
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-xcresult
+          path: build/ios/UniversalDownloader.xcresult
+          retention-days: 30
+
+      - name: Upload iOS coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-coverage
+          path: build/coverage/ios/
+          retention-days: 30
+
+  coverage-dashboard:
+    name: Coverage dashboard
+    runs-on: ubuntu-latest
+    needs:
+      - android-release-tests
+      - ios-tests
+    if: needs.android-release-tests.result == 'success' && needs.ios-tests.result == 'success'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Android coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: android-coverage
+          path: coverage-input/android
+
+      - name: Download iOS coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-coverage
+          path: coverage-input/ios
+
+      - name: Build coverage dashboard
+        run: |
+          python3 scripts/coverage_dashboard.py \
+            --android-csv coverage-input/android/jacocoTestReport.csv \
+            --ios-html coverage-input/ios/index.html \
+            --output build/coverage/dashboard
+
+      - name: Upload coverage dashboard
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-dashboard
+          path: build/coverage/dashboard/
+          retention-days: 30

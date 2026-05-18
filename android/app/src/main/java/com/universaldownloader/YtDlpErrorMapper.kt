@@ -83,7 +83,7 @@ internal object YtDlpErrorMapper {
 
             lowered.contains("unable to extract") ||
                 (lowered.contains("extractor") && lowered.contains("failed")) ->
-                "Failed to extract media info. The site may have changed — try updating yt-dlp."
+                "Failed to extract media info. The site may have changed - try updating yt-dlp."
 
             (lowered.contains("ffmpeg") && (lowered.contains("not found") || lowered.contains("error"))) ||
                 (lowered.contains("postprocessing") && lowered.contains("error")) ||

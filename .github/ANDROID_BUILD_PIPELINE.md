@@ -1,101 +1,83 @@
-# Android Build Pipeline Setup
+# Mobile CI and Android Release Setup
 
-This document describes how to configure the GitHub Actions pipeline for building signed Android APKs.
+This repository now has two GitHub Actions workflows:
 
-## Overview
-
-The repository includes a GitHub Actions workflow (`.github/workflows/android-build.yml`) that:
-- Builds a debug APK on all pushes and pull requests
-- Builds a signed release APK when pushing to `main` or `develop` branches
-- Uploads build artifacts for download
+- `.github/workflows/android-build.yml`: runs on pushes, pull requests, and manual dispatch. It runs Android release-variant unit tests, Android e2e tests, iOS unit/UI tests, and uploads coverage reports plus a coverage dashboard.
+- `.github/workflows/release.yml`: runs manually from the Actions tab. It reruns release tests, builds a signed Android APK, creates the requested tag, publishes a GitHub Release, uploads the APK, and includes the APK SHA-256 hash in the release notes and as a `.sha256` asset.
 
 ## Required GitHub Secrets
 
-To build signed release APKs, you need to configure the following secrets in your GitHub repository:
+Signed release builds require these repository secrets:
 
-### Setting up secrets
+- `KEYSTORE_BASE64`: base64-encoded Android release keystore.
+- `KEYSTORE_PASSWORD`: password for the keystore file.
+- `KEY_ALIAS`: alias of the signing key.
+- `KEY_PASSWORD`: password for the signing key. This can match `KEYSTORE_PASSWORD` if the same password was used for both.
 
-1. Go to your GitHub repository
-2. Navigate to **Settings** → **Secrets and variables** → **Actions**
-3. Click **New repository secret** for each of the following:
+Set them in GitHub under **Settings** -> **Secrets and variables** -> **Actions**.
 
-### Required secrets:
+## Encoding the Keystore
 
-#### `KEYSTORE_BASE64`
-The base64-encoded keystore file for signing the APK.
+Use the release keystore stored outside the repository. For example, on macOS:
 
-To generate this from your keystore file:
 ```bash
-base64 -i your-release-key.keystore | pbcopy  # macOS
-base64 -i your-release-key.keystore | xclip   # Linux
+base64 -i /Users/ct4nk3r/Downloads/my-release-key.keystore | pbcopy
 ```
 
-Or on Windows PowerShell:
+On Linux:
+
+```bash
+base64 -w 0 /path/to/my-release-key.keystore | xclip -selection clipboard
+```
+
+On Windows PowerShell:
+
 ```powershell
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("your-release-key.keystore")) | Set-Clipboard
 ```
 
-#### `KEYSTORE_PASSWORD`
-The password for the keystore file.
-
-#### `KEY_ALIAS`
-The alias of the key within the keystore.
-
-#### `KEY_PASSWORD`
-The password for the specific key (can be the same as `KEYSTORE_PASSWORD`).
-
 ## Creating a Release Keystore
 
-If you don't have a keystore yet, create one using:
+If a keystore is not available yet:
 
 ```bash
 keytool -genkey -v -keystore release.keystore -alias release-key -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-Follow the prompts to set:
-- Keystore password
-- Key password
-- Your organization details
+Keep the keystore and passwords private. The workflow decodes the keystore into the runner temp directory and removes it after the build.
 
-**Important:** Keep your keystore file and passwords secure. Never commit them to the repository.
+## Manual Release
 
-## Build Artifacts
+1. Open **Actions** -> **Release**.
+2. Click **Run workflow**.
+3. Enter a version tag such as `v0.4.0`.
+4. Choose whether it is a prerelease.
+5. Start the workflow.
 
-After the workflow runs:
-- **Debug APK**: Available in workflow artifacts as `app-debug` (30-day retention)
-- **Release APK**: Available in workflow artifacts as `app-release` (90-day retention)
+The workflow refuses to reuse an existing tag. On success it creates:
 
-Download artifacts from:
-- GitHub Actions → Select workflow run → Scroll to "Artifacts" section
+- a signed APK asset named `UniversalDownloader-<version>.apk`,
+- a matching `UniversalDownloader-<version>.apk.sha256` asset,
+- release notes containing the SHA-256 hash.
 
-## Local Build
-
-To build locally with signing:
+## Local Signed Build
 
 ```bash
-# Set environment variables
 export KEYSTORE_FILE=/path/to/your/release.keystore
 export KEYSTORE_PASSWORD=your_keystore_password
 export KEY_ALIAS=your_key_alias
 export KEY_PASSWORD=your_key_password
 
-# Build release APK
 cd android
-./gradlew assembleRelease
+./gradlew testReleaseUnitTest assembleRelease
 ```
 
-The signed APK will be at: `android/app/build/outputs/apk/release/app-release.apk`
+The signed APK is written to `android/app/build/outputs/apk/release/app-release.apk`.
 
-## Troubleshooting
+Without signing environment variables, `assembleRelease` still validates release packaging and writes an unsigned release APK. That path is used by pull-request CI so release-variant tests can run safely without exposing secrets.
 
-### Build fails with "Keystore file not found"
-- Ensure `KEYSTORE_BASE64` secret is properly set
-- Verify the base64 encoding is correct
+## Coverage
 
-### Build fails with "Incorrect keystore password"
-- Double-check `KEYSTORE_PASSWORD` and `KEY_PASSWORD` secrets
-- Ensure there are no extra spaces or newlines in the secret values
+Android coverage is generated with JaCoCo. iOS coverage is generated from `xccov`. The CI dashboard artifact links both platform reports.
 
-### Build fails with "Key alias not found"
-- Verify `KEY_ALIAS` matches the alias in your keystore
-- List aliases in your keystore: `keytool -list -v -keystore release.keystore`
+The strict 100% unit coverage gates are scoped to deterministic core logic. App UI, platform integration, and downloader runtime behavior are covered by the Android and iOS e2e suites.

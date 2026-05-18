@@ -101,12 +101,16 @@ struct DownloadScreen: View {
             Button {
                 viewModel.downloadTapped()
             } label: {
-                Label("Download", systemImage: "arrow.down.circle.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 34)
+                HStack(spacing: 7) {
+                    Image(systemName: "arrow.down.circle")
+                    Text("Download")
+                }
+                .font(.body.weight(.semibold))
+                .frame(maxWidth: .infinity, minHeight: 44)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.plain)
+            .foregroundStyle(.tint)
+            .contentShape(Rectangle())
             .accessibilityIdentifier("download.primaryButton")
         } footer: {
             Text("Paste a link or share one into the app.")
@@ -356,10 +360,11 @@ final class DownloadViewModel: ObservableObject {
             self.progress = Double(progress)
             self.items = items
             setStatus(title: "Downloading", subtitle: ProgressLineSanitizer.sanitize(message), visible: true)
-        case .finished(let fileName):
+        case .finished(let fileName, let title):
             progressVisible = false
             stopVisible = false
-            setStatus(title: "Saved", subtitle: fileName, visible: true)
+            let subtitle = title.map { "\($0)\n\(fileName)" } ?? fileName
+            setStatus(title: "Saved", subtitle: subtitle, visible: true)
         case .stopped(let completedCount):
             progressVisible = false
             stopVisible = false

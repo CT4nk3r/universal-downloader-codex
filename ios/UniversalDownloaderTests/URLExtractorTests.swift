@@ -13,4 +13,28 @@ final class URLExtractorTests: XCTestCase {
     func testFirstURLReturnsNilWhenTextHasNoLink() {
         XCTAssertNil(URLExtractor.firstURL(in: "there is no downloadable link here"))
     }
+
+    func testFirstURLFindsHttpLink() {
+        let url = URLExtractor.firstURL(in: "Open http://example.com/watch")
+
+        XCTAssertEqual(url?.absoluteString, "http://example.com/watch")
+    }
+
+    func testFirstURLIgnoresLeadingWords() {
+        let url = URLExtractor.firstURL(in: "please save this: https://example.com/video")
+
+        XCTAssertEqual(url?.host, "example.com")
+    }
+
+    func testFirstURLHandlesNewlineSeparatedLinks() {
+        let url = URLExtractor.firstURL(in: "first line\nhttps://example.com/video\nhttps://example.com/second")
+
+        XCTAssertEqual(url?.path, "/video")
+    }
+
+    func testFirstURLHandlesParenthesizedLink() {
+        let url = URLExtractor.firstURL(in: "(https://example.com/video)")
+
+        XCTAssertEqual(url?.absoluteString, "https://example.com/video")
+    }
 }

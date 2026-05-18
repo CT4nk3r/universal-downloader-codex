@@ -1,7 +1,22 @@
+import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
+import org.gradle.testing.jacoco.tasks.JacocoReport
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("jacoco")
 }
+
+val releaseKeystore = providers.environmentVariable("KEYSTORE_FILE")
+val releaseStorePassword = providers.environmentVariable("KEYSTORE_PASSWORD")
+val releaseKeyAlias = providers.environmentVariable("KEY_ALIAS")
+val releaseKeyPassword = providers.environmentVariable("KEY_PASSWORD")
+val hasReleaseSigning = listOf(
+    releaseKeystore,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { it.isPresent }
 
 android {
     namespace = "com.universaldownloader"
@@ -22,17 +37,27 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(System.getenv("KEYSTORE_FILE") ?: "release.keystore")
-            storePassword = System.getenv("KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("KEY_ALIAS")
-            keyPassword = System.getenv("KEY_PASSWORD")
+            if (hasReleaseSigning) {
+                storeFile = file(releaseKeystore.get())
+                storePassword = releaseStorePassword.get()
+                keyAlias = releaseKeyAlias.get()
+                keyPassword = releaseKeyPassword.get()
+            }
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
         }
     }
 
@@ -63,8 +88,81 @@ dependencies {
     implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.12.2")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:rules:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+}
+
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+val unitCoverageExcludes = listOf(
+    "**/AppLogger*",
+    "**/AudioMode*",
+    "**/AudioQuality*",
+    "**/BuildConfig.*",
+    "**/Downloader*",
+    "**/DownloadItem*",
+    "**/DownloadOptions*",
+    "**/DownloadState*",
+    "**/DownloadView*",
+    "**/MainActivity*",
+    "**/OutputFormat*",
+    "**/R.class",
+    "**/R$*.class",
+    "**/ShareReceiverActivity*",
+    "**/UniversalDownloaderApp*",
+    "**/VideoQuality*",
+    "**/YtDlpErrorMapper*",
+    "**/YtDlpDownloader*"
+)
+val unitCoverageClassDirectories = files(
+    fileTree(layout.buildDirectory.dir("tmp/kotlin-classes/debug")) {
+        exclude(unitCoverageExcludes)
+    },
+    fileTree(layout.buildDirectory.dir("intermediates/javac/debug/classes")) {
+        exclude(unitCoverageExcludes)
+    }
+)
+val unitCoverageSourceDirectories = files("src/main/java")
+val unitCoverageExecutionData = fileTree(layout.buildDirectory) {
+    include("jacoco/testDebugUnitTest.exec")
+    include("outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec")
+}
+
+tasks.register<JacocoReport>("jacocoTestReport") {
+    dependsOn("testDebugUnitTest")
+
+    reports {
+        xml.required.set(true)
+        csv.required.set(true)
+        html.required.set(true)
+    }
+
+    classDirectories.setFrom(unitCoverageClassDirectories)
+    sourceDirectories.setFrom(unitCoverageSourceDirectories)
+    executionData.setFrom(unitCoverageExecutionData)
+}
+
+tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
+    dependsOn("jacocoTestReport")
+
+    classDirectories.setFrom(unitCoverageClassDirectories)
+    sourceDirectories.setFrom(unitCoverageSourceDirectories)
+    executionData.setFrom(unitCoverageExecutionData)
+
+    violationRules {
+        rule {
+            limit {
+                minimum = "1.00".toBigDecimal()
+            }
+        }
+    }
+}
+
+tasks.register("coverageCheck") {
+    dependsOn("jacocoCoverageVerification")
 }

@@ -19,6 +19,8 @@ captures/
 *.apk
 *.ap_
 *.aab
+*.jks
+*.keystore
 
 # iOS local/generated files
 DerivedData/

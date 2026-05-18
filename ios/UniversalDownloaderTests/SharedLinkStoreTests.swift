@@ -30,4 +30,30 @@ final class SharedLinkStoreTests: XCTestCase {
         XCTAssertEqual(store.drain(), [first, second])
         XCTAssertEqual(store.drain(), [])
     }
+
+    func testDrainSkipsMalformedStoredValues() {
+        defaults.set(["http://[", "https://example.com/ok"], forKey: AppConfig.pendingLinksKey)
+        let store = SharedLinkStore(defaults: defaults)
+
+        XCTAssertEqual(store.drain(), [URL(string: "https://example.com/ok")!])
+    }
+
+    func testDrainOnEmptyStoreReturnsEmptyArray() {
+        let store = SharedLinkStore(defaults: defaults)
+
+        XCTAssertEqual(store.drain(), [])
+    }
+
+    func testEnqueueAppendsToExistingValues() {
+        defaults.set(["https://example.com/existing"], forKey: AppConfig.pendingLinksKey)
+        let store = SharedLinkStore(defaults: defaults)
+        let appended = URL(string: "https://example.com/appended")!
+
+        store.enqueue(appended)
+
+        XCTAssertEqual(
+            defaults.stringArray(forKey: AppConfig.pendingLinksKey),
+            ["https://example.com/existing", "https://example.com/appended"]
+        )
+    }
 }

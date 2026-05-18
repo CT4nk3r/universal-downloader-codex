@@ -53,4 +53,47 @@ final class DownloadViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.finishedItems.map(\.index), [3, 4, 5, 6, 7, 8, 9, 10])
         XCTAssertEqual(viewModel.activeItems.map(\.index), [13, 14, 15, 16])
     }
+
+    @MainActor
+    func testVideoURLSwitchesBackToVideoOptions() {
+        let viewModel = DownloadViewModel()
+
+        viewModel.urlChanged("https://soundcloud.com/artist/track")
+        viewModel.urlChanged("https://youtube.com/watch?v=dQw4w9WgXcQ")
+
+        XCTAssertEqual(viewModel.selectedAudioMode, .videoWithAudio)
+        XCTAssertEqual(viewModel.availableFormats, [.source, .mp4, .mov, .mkv, .webm])
+    }
+
+    @MainActor
+    func testAudioOnlyRemembersAudioFormat() {
+        let viewModel = DownloadViewModel()
+
+        viewModel.select(audioMode: .audioOnly)
+        viewModel.select(format: .wav)
+        viewModel.select(audioMode: .videoWithAudio)
+        viewModel.select(audioMode: .audioOnly)
+
+        XCTAssertEqual(viewModel.selectedOutputFormat, .wav)
+    }
+
+    @MainActor
+    func testVideoOnlyUsesVideoFormats() {
+        let viewModel = DownloadViewModel()
+
+        viewModel.select(audioMode: .videoOnly)
+
+        XCTAssertEqual(viewModel.availableFormats, [.source, .mp4, .mov, .mkv, .webm])
+    }
+
+    @MainActor
+    func testShareLogsFallsBackToActivityShare() {
+        let viewModel = DownloadViewModel()
+
+        viewModel.shareLogs(emailOnly: false)
+
+        guard case .activity = viewModel.presentedShare else {
+            return XCTFail("Expected activity share")
+        }
+    }
 }
