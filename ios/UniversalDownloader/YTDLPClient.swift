@@ -58,6 +58,7 @@ struct DownloadItem: Equatable {
     var total: Int?
     var title: String
     var fileName: String?
+    var fileURL: URL?
     var progress: Int
     var status: DownloadItemStatus
 }
@@ -181,12 +182,8 @@ struct YTDLPClient {
     }
 
     private func savePlaceholderFile(named fileName: String, sourceURL: URL, options: DownloadOptions) throws -> String {
-        let directory = FileManager.default.urls(
-            for: .documentDirectory,
-            in: .userDomainMask
-        )[0].appendingPathComponent("UniversalDownloader", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let fileURL = directory.appendingPathComponent(fileName)
+        try DownloadFileStore.prepareDirectory()
+        let fileURL = DownloadFileStore.fileURL(named: fileName)
         let body = """
         Universal Downloader iOS placeholder
         Source: \(sourceURL.absoluteString)
@@ -196,6 +193,32 @@ struct YTDLPClient {
         """
         try body.write(to: fileURL, atomically: true, encoding: .utf8)
         return fileName
+    }
+}
+
+enum DownloadFileStore {
+    static var directoryURL: URL {
+        FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        )[0].appendingPathComponent("Downloads", isDirectory: true)
+    }
+
+    static func prepareDirectory() throws {
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+    }
+
+    static func fileURL(named fileName: String) -> URL {
+        directoryURL.appendingPathComponent(fileName)
+    }
+
+    static func displayPath(for fileURL: URL) -> String {
+        "Files > On My iPhone > Universal Downloader > Downloads > \(fileURL.lastPathComponent)"
+    }
+
+    static func delete(_ fileURL: URL) throws {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+        try FileManager.default.removeItem(at: fileURL)
     }
 }
 
