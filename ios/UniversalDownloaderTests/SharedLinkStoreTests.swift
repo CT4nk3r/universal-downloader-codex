@@ -56,4 +56,15 @@ final class SharedLinkStoreTests: XCTestCase {
             ["https://example.com/existing", "https://example.com/appended"]
         )
     }
+
+    func testNilDefaultsFallsBackToStandardDefaults() {
+        let store = SharedLinkStore(defaults: nil)
+        let url = URL(string: "https://example.com/fallback")!
+
+        UserDefaults.standard.removeObject(forKey: AppConfig.pendingLinksKey)
+        store.enqueue(url)
+
+        XCTAssertEqual(store.drain(), [url])
+        XCTAssertNil(UserDefaults.standard.stringArray(forKey: AppConfig.pendingLinksKey))
+    }
 }
