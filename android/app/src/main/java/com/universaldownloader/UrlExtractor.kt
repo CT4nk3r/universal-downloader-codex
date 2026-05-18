@@ -17,7 +17,7 @@ object UrlExtractor {
 
     fun firstUrl(text: String): String? {
         val matcher = urlPattern.matcher(text)
-        return if (matcher.find()) matcher.group(1)?.trimEnd('.', ',', ')') else null
+        return if (matcher.find()) matcher.group(1).trimEnd('.', ',', ')') else null
     }
 
     fun isSupportedUrl(text: String): Boolean {
@@ -25,4 +25,3 @@ object UrlExtractor {
             text.startsWith("https://", ignoreCase = true)
     }
 }
-

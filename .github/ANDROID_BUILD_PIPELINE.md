@@ -2,8 +2,8 @@
 
 This repository now has two GitHub Actions workflows:
 
-- `.github/workflows/android-build.yml`: runs on pushes, pull requests, and manual dispatch. It runs Android release-variant unit tests, Android e2e tests, iOS unit/UI tests, and uploads coverage reports plus a coverage dashboard.
-- `.github/workflows/release.yml`: runs manually from the Actions tab. It reruns release tests, builds a signed Android APK, creates the requested tag, publishes a GitHub Release, uploads the APK, and includes the APK SHA-256 hash in the release notes and as a `.sha256` asset.
+- `.github/workflows/android-build.yml`: runs on pushes, pull requests, and manual dispatch. It has separate Android release, Android unit, Android e2e, iOS unit, and iOS e2e jobs. The unit jobs publish coverage reports plus a combined coverage dashboard.
+- `.github/workflows/release.yml`: runs manually from the Actions tab. It reruns the same split test gates, builds a signed Android APK, creates the requested tag, publishes a GitHub Release, uploads the APK, and includes the APK SHA-256 hash in the release notes and as a `.sha256` asset.
 
 ## Required GitHub Secrets
 

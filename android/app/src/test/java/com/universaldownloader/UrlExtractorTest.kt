@@ -77,6 +77,14 @@ class UrlExtractorTest {
     }
 
     @Test
+    fun fromShareIntent_missingSharedText_returnsNull() {
+        val intent = Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+
+        assertNull(UrlExtractor.fromShareIntent(intent))
+    }
+
+    @Test
     fun fromShareIntent_wrongAction_returnsNull() {
         val intent = Intent(Intent.ACTION_VIEW)
             .setType("text/plain")

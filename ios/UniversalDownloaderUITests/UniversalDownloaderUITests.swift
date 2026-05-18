@@ -98,7 +98,7 @@ final class UniversalDownloaderUITests: XCTestCase {
     }
 
     func testOptionsShowDownloadOptionsHeader() {
-        assertOptionText("Download Options")
+        assertOptionText("download.optionsHeader")
     }
 
     func testSoundCloudLinkShowsMp3Format() {
