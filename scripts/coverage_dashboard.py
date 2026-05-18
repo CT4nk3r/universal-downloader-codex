@@ -24,9 +24,29 @@ def android_summary(csv_path: Path) -> tuple[float, str]:
     return coverage, f"{covered}/{total} instructions covered"
 
 
-def write_dashboard(output: Path, android_csv: Path, ios_html: Path | None) -> None:
+def write_dashboard(
+    output: Path,
+    android_csv: Path,
+    ios_html: Path | None,
+    pr_number: str | None = None,
+    run_url: str | None = None,
+    commit_sha: str | None = None,
+) -> None:
     output.mkdir(parents=True, exist_ok=True)
     android_coverage, android_detail = android_summary(android_csv)
+    metadata = []
+    if pr_number:
+        metadata.append(f"Pull Request #{html.escape(pr_number)}")
+    if commit_sha:
+        metadata.append(f"Commit {html.escape(commit_sha[:7])}")
+    if run_url:
+        safe_run_url = html.escape(run_url, quote=True)
+        metadata.append(f'<a href="{safe_run_url}">GitHub Actions run</a>')
+    metadata_html = (
+        f"  <p class=\"metadata\">{' | '.join(metadata)}</p>"
+        if metadata
+        else ""
+    )
     ios_link = (
         '<a href="../ios/index.html">iOS coverage report</a>'
         if ios_html and ios_html.exists()
@@ -47,11 +67,13 @@ def write_dashboard(output: Path, android_csv: Path, ios_html: Path | None) -> N
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 32px; color: #17201d; }}
     section {{ border: 1px solid #dce5df; border-radius: 8px; padding: 18px; margin-bottom: 16px; }}
+    .metadata {{ color: #53635c; }}
     a {{ color: #0b6e55; }}
   </style>
 </head>
 <body>
   <h1>Universal Downloader Coverage</h1>
+{metadata_html}
   <section>
     <h2>Android Unit Coverage</h2>
     <p><strong>{android_coverage:.2f}%</strong> - {html.escape(android_detail)}</p>
@@ -73,9 +95,19 @@ def main() -> int:
     parser.add_argument("--android-csv", required=True, type=Path)
     parser.add_argument("--ios-html", type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--pr-number")
+    parser.add_argument("--run-url")
+    parser.add_argument("--commit-sha")
     args = parser.parse_args()
 
-    write_dashboard(args.output, args.android_csv, args.ios_html)
+    write_dashboard(
+        args.output,
+        args.android_csv,
+        args.ios_html,
+        pr_number=args.pr_number,
+        run_url=args.run_url,
+        commit_sha=args.commit_sha,
+    )
     return 0
 
 
