@@ -2,7 +2,7 @@
 
 Native mobile wrappers around `yt-dlp` style downloading for shared links from YouTube, X/Twitter, Reddit, and other supported sites.
 
-[Code coverage dashboard](https://ct4nk3r.github.io/universal-downloader-codex/)
+[Code coverage dashboard](https://ct4nk3r.github.io/universal-downloader-codex/code-coverage/)
 
 ## What is included
 

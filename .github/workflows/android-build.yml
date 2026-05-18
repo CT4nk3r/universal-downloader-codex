@@ -243,7 +243,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: https://ct4nk3r.github.io/universal-downloader-codex/code-coverage/
     needs:
       - android-unit-tests
       - ios-unit-tests
@@ -290,6 +290,22 @@ jobs:
           </html>
           HTML
           touch build/coverage/.nojekyll
+          mkdir -p build/pages
+          cp -R build/coverage build/pages/code-coverage
+          cat > build/pages/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta http-equiv="refresh" content="0; url=code-coverage/">
+            <title>Universal Downloader Coverage</title>
+          </head>
+          <body>
+            <p><a href="code-coverage/">Code coverage dashboard</a></p>
+          </body>
+          </html>
+          HTML
+          touch build/pages/.nojekyll
 
       - name: Upload coverage dashboard
         if: always()
@@ -307,7 +323,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: build/coverage/
+          path: build/pages/
 
       - name: Deploy coverage dashboard to Pages
         id: deployment
