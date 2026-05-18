@@ -121,31 +121,35 @@ struct DownloadScreen: View {
 
     private var optionsSection: some View {
         Section("Download Options") {
-            OptionSegmentedControl(
-                title: "Audio",
-                options: AudioMode.allCases,
-                selection: audioModeBinding
-            )
+            Picker("Audio", selection: audioModeBinding) {
+                ForEach(AudioMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
 
-            OptionSegmentedControl(
-                title: "Format",
-                options: viewModel.availableFormats,
-                selection: formatBinding
-            )
+            Picker("Format", selection: formatBinding) {
+                ForEach(viewModel.availableFormats, id: \.self) { format in
+                    Text(format.rawValue).tag(format)
+                }
+            }
+            .pickerStyle(.segmented)
             .accessibilityIdentifier("optionPicker.format")
 
             if viewModel.selectedAudioMode == .audioOnly {
-                OptionSegmentedControl(
-                    title: "Audio Quality",
-                    options: AudioQuality.allCases,
-                    selection: $viewModel.selectedAudioQuality
-                )
+                Picker("Audio Quality", selection: $viewModel.selectedAudioQuality) {
+                    ForEach(AudioQuality.allCases, id: \.self) { quality in
+                        Text(quality.rawValue).tag(quality)
+                    }
+                }
+                .pickerStyle(.segmented)
             } else {
-                OptionSegmentedControl(
-                    title: "Video Quality",
-                    options: VideoQuality.allCases,
-                    selection: $viewModel.selectedQuality
-                )
+                Picker("Video Quality", selection: $viewModel.selectedQuality) {
+                    ForEach(VideoQuality.allCases, id: \.self) { quality in
+                        Text(quality.rawValue).tag(quality)
+                    }
+                }
+                .pickerStyle(.segmented)
             }
         }
     }
@@ -583,93 +587,6 @@ struct DownloadPrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(.tint)
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .animation(.spring(response: 0.18, dampingFraction: 0.72), value: configuration.isPressed)
-    }
-}
-
-struct OptionSegmentedControl<Value>: View where Value: Hashable & RawRepresentable, Value.RawValue == String {
-    let title: String
-    let options: [Value]
-    @Binding var selection: Value
-    @State private var dragX: CGFloat?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-
-            GeometryReader { proxy in
-                let width = max(proxy.size.width, 1)
-                let segmentWidth = width / CGFloat(max(options.count, 1))
-                let selectedIndex = options.firstIndex(of: selection) ?? 0
-                let selectedX = CGFloat(selectedIndex) * segmentWidth
-                let draggedX = dragX.map { min(max($0 - segmentWidth / 2, 0), max(width - segmentWidth, 0)) }
-
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(.thinMaterial)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
-                        }
-
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.18))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .stroke(Color.accentColor.opacity(0.28), lineWidth: 1)
-                        }
-                        .frame(width: max(segmentWidth - 4, 1), height: 34)
-                        .offset(x: (draggedX ?? selectedX) + 2)
-                        .animation(.spring(response: 0.22, dampingFraction: 0.78), value: selection)
-
-                    HStack(spacing: 0) {
-                        ForEach(options, id: \.self) { option in
-                            Button {
-                                withAnimation(.spring(response: 0.22, dampingFraction: 0.78)) {
-                                    selection = option
-                                }
-                            } label: {
-                                Text(option.rawValue)
-                                    .font(.caption.weight(.semibold))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.72)
-                                    .frame(maxWidth: .infinity, minHeight: 38)
-                                    .foregroundStyle(selection == option ? Color.accentColor : Color.primary)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .contentShape(Rectangle())
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            dragX = min(max(value.location.x, 0), width)
-                            updateSelection(at: value.location.x, width: width)
-                        }
-                        .onEnded { value in
-                            updateSelection(at: value.location.x, width: width)
-                            withAnimation(.spring(response: 0.22, dampingFraction: 0.78)) {
-                                dragX = nil
-                            }
-                        }
-                )
-            }
-            .frame(height: 38)
-        }
-        .padding(.vertical, 3)
-    }
-
-    private func updateSelection(at x: CGFloat, width: CGFloat) {
-        guard !options.isEmpty else { return }
-        let clampedX = min(max(x, 0), max(width - 1, 0))
-        let segmentWidth = width / CGFloat(options.count)
-        let index = min(max(Int(clampedX / segmentWidth), 0), options.count - 1)
-        let option = options[index]
-        if option != selection {
-            selection = option
-        }
     }
 }
 
