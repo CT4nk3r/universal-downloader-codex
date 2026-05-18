@@ -2,6 +2,8 @@
 
 Native mobile wrappers around `yt-dlp` style downloading for shared links from YouTube, X/Twitter, Reddit, and other supported sites.
 
+[Code coverage dashboard](https://ct4nk3r.github.io/universal-downloader-codex/)
+
 ## What is included
 
 - `android/`: Kotlin Android app using Material Components.

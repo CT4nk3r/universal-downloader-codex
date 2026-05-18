@@ -241,6 +241,9 @@ jobs:
   coverage-dashboard:
     name: Coverage dashboard
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     needs:
       - android-unit-tests
       - ios-unit-tests
@@ -307,5 +310,6 @@ jobs:
           path: build/coverage/
 
       - name: Deploy coverage dashboard to Pages
+        id: deployment
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/deploy-pages@v4
