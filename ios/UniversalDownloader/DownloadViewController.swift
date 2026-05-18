@@ -118,7 +118,7 @@ struct DownloadScreen: View {
     }
 
     private var optionsSection: some View {
-        Section("Download Options") {
+        Section {
             Picker("Audio", selection: audioModeBinding) {
                 ForEach(AudioMode.allCases, id: \.self) { mode in
                     Text(mode.rawValue).tag(mode)
@@ -147,6 +147,9 @@ struct DownloadScreen: View {
                     }
                 }
             }
+        } header: {
+            Text("Download Options")
+                .accessibilityIdentifier("download.optionsHeader")
         }
     }
 

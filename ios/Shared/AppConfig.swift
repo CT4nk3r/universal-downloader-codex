@@ -9,6 +9,6 @@ enum AppConfig {
     static func openAppURL(for sharedURL: URL) -> URL {
         var components = URLComponents(url: openAppURL, resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "url", value: sharedURL.absoluteString)]
-        return components.url ?? openAppURL
+        return components.url!
     }
 }

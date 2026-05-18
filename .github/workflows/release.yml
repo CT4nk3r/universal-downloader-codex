@@ -17,7 +17,7 @@ permissions:
   contents: write
 
 jobs:
-  android-tests:
+  android-release-tests:
     name: Android release tests
     runs-on: ubuntu-latest
 
@@ -35,14 +35,39 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./android/gradlew
 
-      - name: Run Android release-variant unit tests
+      - name: Build release APK and run release unit tests
         run: |
           cd android
-          ./gradlew testDebugUnitTest testReleaseUnitTest jacocoTestReport jacocoCoverageVerification --stacktrace
+          ./gradlew testReleaseUnitTest assembleRelease --stacktrace
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false
 
-  android-e2e:
+  android-unit-tests:
+    name: Android unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: temurin
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./android/gradlew
+
+      - name: Run Android unit tests and coverage
+        run: |
+          cd android
+          ./gradlew testDebugUnitTest jacocoTestReport jacocoCoverageVerification --stacktrace
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+  android-e2e-tests:
     name: Android e2e tests
     runs-on: ubuntu-latest
 
@@ -75,8 +100,8 @@ jobs:
           profile: pixel_6
           script: cd android && ./gradlew connectedDebugAndroidTest --stacktrace
 
-  ios-tests:
-    name: iOS unit and e2e tests
+  ios-unit-tests:
+    name: iOS unit tests
     runs-on: macos-latest
 
     steps:
@@ -94,29 +119,65 @@ jobs:
         id: simulator
         run: echo "destination=$(python3 scripts/select_ios_destination.py)" >> "$GITHUB_OUTPUT"
 
-      - name: Run iOS unit and UI tests with coverage
+      - name: Run iOS unit tests with coverage
         run: |
-          mkdir -p build/ios build/coverage/ios
+          mkdir -p build/ios
           xcodebuild test \
             -project ios/UniversalDownloader.xcodeproj \
             -scheme UniversalDownloader \
             -destination "${{ steps.simulator.outputs.destination }}" \
+            -only-testing:UniversalDownloaderTests \
             -enableCodeCoverage YES \
-            -resultBundlePath build/ios/UniversalDownloader.xcresult
-          xcrun xccov view --report --json build/ios/UniversalDownloader.xcresult > build/coverage/ios/coverage.json
+            -resultBundlePath build/ios/UniversalDownloaderUnitTests.xcresult
+
+      - name: Export iOS unit coverage
+        run: |
+          mkdir -p build/coverage/ios
+          xcrun xccov view --report --json build/ios/UniversalDownloaderUnitTests.xcresult > build/coverage/ios/coverage.json
           python3 scripts/ios_coverage_report.py \
             --input build/coverage/ios/coverage.json \
             --output build/coverage/ios \
             --threshold 100 \
             --include "/Shared/"
 
+  ios-e2e-tests:
+    name: iOS e2e tests
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+        working-directory: ios
+
+      - name: Select simulator
+        id: simulator
+        run: echo "destination=$(python3 scripts/select_ios_destination.py)" >> "$GITHUB_OUTPUT"
+
+      - name: Run iOS UI tests
+        run: |
+          mkdir -p build/ios
+          xcodebuild test \
+            -project ios/UniversalDownloader.xcodeproj \
+            -scheme UniversalDownloader \
+            -destination "${{ steps.simulator.outputs.destination }}" \
+            -only-testing:UniversalDownloaderUITests \
+            -resultBundlePath build/ios/UniversalDownloaderUITests.xcresult
+
   signed-apk-release:
     name: Sign APK, tag, and publish release
     runs-on: ubuntu-latest
     needs:
-      - android-tests
-      - android-e2e
-      - ios-tests
+      - android-release-tests
+      - android-unit-tests
+      - android-e2e-tests
+      - ios-unit-tests
+      - ios-e2e-tests
 
     steps:
       - name: Checkout repository
