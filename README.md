@@ -2,7 +2,7 @@
 
 Native mobile wrappers around `yt-dlp` style downloading for shared links from YouTube, X/Twitter, Reddit, and other supported sites.
 
-[Code coverage dashboard](https://ct4nk3r.github.io/universal-downloader-codex/code-coverage/)
+[Latest main code coverage dashboard](https://ct4nk3r.github.io/universal-downloader-codex/code-coverage/)
 
 ## What is included
 
@@ -49,6 +49,6 @@ Update the App Group in `project.yml`, `AppConfig.swift`, and the extension enti
 
 ## Tests and releases
 
-Pull requests run Android release-variant unit tests, Android e2e tests, iOS unit/UI tests, and coverage reporting. Manual releases are created from **Actions** -> **Release** with a version like `v0.4.0`; the workflow signs the Android APK, creates the tag, publishes the GitHub Release, and includes the APK SHA-256 hash.
+Pull requests run Android release-variant unit tests, Android e2e tests, iOS unit/UI tests, and coverage reporting. PR coverage dashboards are uploaded in the `coverage-dashboard` artifact under `pr-<number>/`. Manual releases are created from **Actions** -> **Release** with a version like `v0.4.0`; the workflow signs the Android APK, creates the tag, publishes the GitHub Release, and includes the APK SHA-256 hash.
 
 See `.github/ANDROID_BUILD_PIPELINE.md` and `docs/wiki/Testing-and-Coverage.md` for setup details.

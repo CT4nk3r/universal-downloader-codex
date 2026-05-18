@@ -30,6 +30,10 @@ Coverage reports are uploaded as GitHub Actions artifacts:
 - `ios-coverage`
 - `coverage-dashboard`
 
+For pull requests, the combined dashboard artifact also includes a PR-specific
+sublink folder named `pr-<number>/`, for example `pr-42/index.html`. The public
+GitHub Pages coverage dashboard is updated only from `main` pushes.
+
 ## Local Android Tests
 
 ```bash
