@@ -150,6 +150,14 @@ final class UniversalDownloaderUITests: XCTestCase {
         XCTAssertTrue(app.alerts["Universal Downloader"].buttons["Email logs"].waitForExistence(timeout: 2))
     }
 
+    func testAboutDialogShowsVersionNumber() {
+        let app = launchApp()
+
+        app.buttons["About"].tap()
+
+        XCTAssertTrue(app.alerts["Universal Downloader"].staticTexts["Version 0.1.0\n\nDiagnostics can help debug playlist, format, and download issues. Logs redact pasted links to host and length only."].waitForExistence(timeout: 2))
+    }
+
     func testAboutDialogShowsShareLogsAction() {
         let app = launchApp()
 
