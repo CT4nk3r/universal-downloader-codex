@@ -90,7 +90,7 @@ struct DownloadScreen: View {
             Button("Share logs") { viewModel.shareLogs(emailOnly: false) }
             Button("Close", role: .cancel) {}
         } message: {
-            Text("Version 0.x\n\nDiagnostics can help debug playlist, format, and download issues. Logs redact pasted links to host and length only.")
+            Text("Version \(appVersion)\n\nDiagnostics can help debug playlist, format, and download issues. Logs redact pasted links to host and length only.")
         }
         .sheet(item: $viewModel.presentedShare) { share in
             switch share {
@@ -100,6 +100,10 @@ struct DownloadScreen: View {
                 MailView(logURL: url)
             }
         }
+    }
+
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
     }
 
     private var linkSection: some View {

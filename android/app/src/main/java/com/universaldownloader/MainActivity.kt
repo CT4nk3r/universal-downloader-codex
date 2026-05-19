@@ -23,7 +23,7 @@ class MainActivity : ComponentActivity() {
     private fun showAbout() {
         AlertDialog.Builder(this)
             .setTitle("Universal Downloader")
-            .setMessage("Version 0.x\n\nDiagnostics can help debug playlist, format, and download issues. Logs redact pasted links to host and length only.")
+            .setMessage("Version ${BuildConfig.VERSION_NAME}\n\nDiagnostics can help debug playlist, format, and download issues. Logs redact pasted links to host and length only.")
             .setPositiveButton("Email logs") { _, _ -> shareLogs(emailOnly = true) }
             .setNegativeButton("Share logs") { _, _ -> shareLogs(emailOnly = false) }
             .setNeutralButton("Close", null)

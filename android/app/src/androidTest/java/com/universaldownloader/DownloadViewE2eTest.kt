@@ -64,6 +64,15 @@ class DownloadViewE2eTest {
     fun launchShowsAboutButton() = launchAndAssertText("i")
 
     @Test
+    fun aboutDialogShowsVersionNumber() {
+        launch {
+            onView(withText("i")).perform(click())
+            onView(withText("Version ${BuildConfig.VERSION_NAME}\n\nDiagnostics can help debug playlist, format, and download issues. Logs redact pasted links to host and length only."))
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
     fun launchShowsHideOptionsButton() = launchAndAssertText("Hide options")
 
     @Test
