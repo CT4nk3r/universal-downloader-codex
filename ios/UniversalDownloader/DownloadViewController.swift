@@ -1,5 +1,4 @@
 import MessageUI
-import QuickLook
 import SwiftUI
 import UIKit
 
@@ -85,9 +84,6 @@ struct DownloadScreen: View {
                 MailView(logURL: url)
             }
         }
-        .sheet(item: $viewModel.presentedPreview) { preview in
-            QuickLookPreview(url: preview.url)
-        }
     }
 
     private var linkSection: some View {
@@ -121,35 +117,23 @@ struct DownloadScreen: View {
 
     private var optionsSection: some View {
         Section("Download Options") {
-            Picker("Audio", selection: audioModeBinding) {
-                ForEach(AudioMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
+            NativeSegmentedPicker("Audio", options: AudioMode.allCases, selection: audioModeBinding)
+                .frame(maxWidth: .infinity, minHeight: 32)
 
-            Picker("Format", selection: formatBinding) {
-                ForEach(viewModel.availableFormats, id: \.self) { format in
-                    Text(format.rawValue).tag(format)
-                }
-            }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("optionPicker.format")
+            NativeSegmentedPicker(
+                "Format",
+                options: viewModel.availableFormats,
+                selection: formatBinding,
+                accessibilityIdentifier: "optionPicker.format"
+            )
+            .frame(maxWidth: .infinity, minHeight: 32)
 
             if viewModel.selectedAudioMode == .audioOnly {
-                Picker("Audio Quality", selection: $viewModel.selectedAudioQuality) {
-                    ForEach(AudioQuality.allCases, id: \.self) { quality in
-                        Text(quality.rawValue).tag(quality)
-                    }
-                }
-                .pickerStyle(.segmented)
+                NativeSegmentedPicker("Audio Quality", options: AudioQuality.allCases, selection: $viewModel.selectedAudioQuality)
+                    .frame(maxWidth: .infinity, minHeight: 32)
             } else {
-                Picker("Video Quality", selection: $viewModel.selectedQuality) {
-                    ForEach(VideoQuality.allCases, id: \.self) { quality in
-                        Text(quality.rawValue).tag(quality)
-                    }
-                }
-                .pickerStyle(.segmented)
+                NativeSegmentedPicker("Video Quality", options: VideoQuality.allCases, selection: $viewModel.selectedQuality)
+                    .frame(maxWidth: .infinity, minHeight: 32)
             }
         }
     }
@@ -220,12 +204,13 @@ struct DownloadScreen: View {
             Section("Downloaded") {
                 ForEach(viewModel.finishedItems, id: \.identity) { item in
                     Button {
-                        viewModel.preview(item)
+                        viewModel.openFileActions(item)
                     } label: {
                         DownloadedItemRow(item: item)
                     }
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
+                    .accessibilityIdentifier(item.fileName.map { "downloadedItem.\($0)" } ?? "downloadedItem.\(item.index)")
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {
                             viewModel.delete(item)
@@ -265,7 +250,6 @@ final class DownloadViewModel: ObservableObject {
     @Published var selectedAudioQuality: AudioQuality = .original
     @Published var showingAbout = false
     @Published var presentedShare: PresentedShare?
-    @Published var presentedPreview: PresentedPreview?
 
     private let downloader = YTDLPClient()
     private let store = SharedLinkStore()
@@ -350,14 +334,14 @@ final class DownloadViewModel: ObservableObject {
         }
     }
 
-    func preview(_ item: DownloadItem) {
+    func openFileActions(_ item: DownloadItem) {
         guard let url = existingFileURL(for: item) else {
-            AppLogger.warning("Preview requested for missing file: \(item.fileName ?? "unknown")")
+            AppLogger.warning("File actions requested for missing file: \(item.fileName ?? "unknown")")
             setStatus(title: "File unavailable", subtitle: "The downloaded file is no longer in the app's Downloads folder.", visible: true)
             return
         }
 
-        presentedPreview = PresentedPreview(url: url)
+        presentedShare = .activity(url)
     }
 
     func share(_ item: DownloadItem) {
@@ -561,7 +545,7 @@ struct DownloadedItemRow: View {
 
             Spacer(minLength: 8)
 
-            Image(systemName: "chevron.right")
+            Image(systemName: "square.and.arrow.up")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.tertiary)
                 .padding(.top, 5)
@@ -587,6 +571,114 @@ struct DownloadPrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(.tint)
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .animation(.spring(response: 0.18, dampingFraction: 0.72), value: configuration.isPressed)
+    }
+}
+
+struct NativeSegmentedPicker<Value>: UIViewRepresentable where Value: Hashable & RawRepresentable, Value.RawValue == String {
+    let title: String
+    let options: [Value]
+    let accessibilityIdentifier: String?
+    @Binding var selection: Value
+
+    init(
+        _ title: String,
+        options: [Value],
+        selection: Binding<Value>,
+        accessibilityIdentifier: String? = nil
+    ) {
+        self.title = title
+        self.options = options
+        self._selection = selection
+        self.accessibilityIdentifier = accessibilityIdentifier
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(options: options, selection: $selection)
+    }
+
+    func makeUIView(context: Context) -> TrackingSegmentedControl {
+        let control = TrackingSegmentedControl(items: options.map(\.rawValue))
+        control.apportionsSegmentWidthsByContent = false
+        control.isMomentary = false
+        control.addTarget(context.coordinator, action: #selector(Coordinator.valueChanged(_:)), for: .valueChanged)
+        return control
+    }
+
+    func updateUIView(_ uiView: TrackingSegmentedControl, context: Context) {
+        context.coordinator.options = options
+        context.coordinator.selection = $selection
+        uiView.accessibilityLabel = title
+        uiView.accessibilityIdentifier = accessibilityIdentifier
+        uiView.isEnabled = !options.isEmpty
+
+        if uiView.segmentTitles != options.map(\.rawValue) {
+            uiView.removeAllSegments()
+            for (index, option) in options.enumerated() {
+                uiView.insertSegment(withTitle: option.rawValue, at: index, animated: false)
+            }
+        }
+
+        let selectedIndex = options.firstIndex(of: selection) ?? UISegmentedControl.noSegment
+        if uiView.selectedSegmentIndex != selectedIndex {
+            uiView.selectedSegmentIndex = selectedIndex
+        }
+    }
+
+    final class Coordinator: NSObject {
+        var options: [Value]
+        var selection: Binding<Value>
+
+        init(options: [Value], selection: Binding<Value>) {
+            self.options = options
+            self.selection = selection
+        }
+
+        @objc func valueChanged(_ sender: UISegmentedControl) {
+            let index = sender.selectedSegmentIndex
+            guard options.indices.contains(index) else { return }
+            let value = options[index]
+            if selection.wrappedValue != value {
+                selection.wrappedValue = value
+            }
+        }
+    }
+}
+
+final class TrackingSegmentedControl: UISegmentedControl {
+    override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+        let result = super.beginTracking(touch, with: event)
+        trackSelection(for: touch)
+        return result
+    }
+
+    override func continueTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+        let result = super.continueTracking(touch, with: event)
+        trackSelection(for: touch)
+        return result
+    }
+
+    override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
+        if let touch {
+            trackSelection(for: touch)
+        }
+        super.endTracking(touch, with: event)
+    }
+
+    var segmentTitles: [String] {
+        (0..<numberOfSegments).map { titleForSegment(at: $0) ?? "" }
+    }
+
+    private func trackSelection(for touch: UITouch) {
+        guard numberOfSegments > 0, bounds.width > 0 else { return }
+        let x = touch.location(in: self).x
+        guard x >= 0, x <= bounds.width else { return }
+
+        let segmentWidth = bounds.width / CGFloat(numberOfSegments)
+        let index = min(max(Int(x / segmentWidth), 0), numberOfSegments - 1)
+        guard selectedSegmentIndex != index else { return }
+
+        selectedSegmentIndex = index
+        sendActions(for: .valueChanged)
     }
 }
 
@@ -645,49 +737,6 @@ enum PresentedShare: Identifiable {
         switch self {
         case .activity(let url): "activity-\(url.path)"
         case .mail(let url): "mail-\(url.path)"
-        }
-    }
-}
-
-struct PresentedPreview: Identifiable {
-    let url: URL
-
-    var id: String {
-        url.path
-    }
-}
-
-struct QuickLookPreview: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(url: url)
-    }
-
-    func makeUIViewController(context: Context) -> QLPreviewController {
-        let controller = QLPreviewController()
-        controller.dataSource = context.coordinator
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: QLPreviewController, context: Context) {
-        context.coordinator.url = url
-        uiViewController.reloadData()
-    }
-
-    final class Coordinator: NSObject, QLPreviewControllerDataSource {
-        var url: URL
-
-        init(url: URL) {
-            self.url = url
-        }
-
-        func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
-            1
-        }
-
-        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
-            url as NSURL
         }
     }
 }
